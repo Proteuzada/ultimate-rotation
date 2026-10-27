@@ -5,27 +5,46 @@ using Dalamud.Interface.Windowing;
 
 namespace UltimateRotation.Windows;
 
+internal enum SettingsPage
+{
+    Parses,
+    Actions,
+    Rotation,
+}
+
 internal sealed class SetupWindow : Window
 {
     private readonly Configuration configuration;
     private readonly GuideController controller;
-    private readonly ActionsWindow actions;
+    private readonly ActionBrowser actions = new();
     private string clientId = string.Empty;
     private string clientSecret = string.Empty;
+    private SettingsPage page = SettingsPage.Parses;
 
-    public SetupWindow(Configuration configuration, GuideController controller, ActionsWindow actions)
+    public SetupWindow(Configuration configuration, GuideController controller)
         : base(UiText.SetupTitle)
     {
         this.configuration = configuration;
         this.controller = controller;
-        this.actions = actions;
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(460, 520),
-            MaximumSize = new Vector2(900, 1200),
+            MinimumSize = new Vector2(760, 480),
+            MaximumSize = new Vector2(1400, 1200),
         };
-        this.Size = new Vector2(560, 700);
+        this.Size = new Vector2(960, 640);
         this.SizeCondition = ImGuiCond.FirstUseEver;
+    }
+
+    public void OpenPage(SettingsPage target)
+    {
+        if (this.IsOpen && this.page == target)
+        {
+            this.IsOpen = false;
+            return;
+        }
+
+        this.page = target;
+        this.IsOpen = true;
     }
 
     public override void OnOpen()
@@ -37,6 +56,95 @@ internal sealed class SetupWindow : Window
     public override void Draw()
     {
         var view = this.controller.Snapshot();
+        var avail = ImGui.GetContentRegionAvail();
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var side = Math.Clamp(avail.X * 0.22f, 156f, 210f);
+
+        using (var nav = ImRaii.Child("settings-nav", new Vector2(side, avail.Y), true))
+        {
+            if (nav)
+                this.DrawNav(view);
+        }
+
+        var origin = ImGui.GetItemRectMin();
+        var navMax = ImGui.GetItemRectMax();
+        ImGui.GetWindowDrawList().AddLine(
+            new Vector2(navMax.X + (spacing * 0.5f), origin.Y),
+            new Vector2(navMax.X + (spacing * 0.5f), origin.Y + avail.Y),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.12f)));
+
+        ImGui.SameLine(0f, spacing);
+        using var body = ImRaii.Child("settings-body", new Vector2(0f, avail.Y), false);
+        if (!body)
+            return;
+
+        this.DrawHeading(view);
+        switch (this.page)
+        {
+            case SettingsPage.Actions:
+                this.actions.Draw(this.controller, view);
+                break;
+            case SettingsPage.Rotation:
+                this.DrawRotation(view);
+                break;
+            default:
+                this.DrawParses(view);
+                break;
+        }
+    }
+
+    private void DrawNav(GuideSnapshot view)
+    {
+        ImGui.Text("Ultimate Rotation");
+        var job = JobCatalog.Find(view.JobSpec)?.EnglishName ?? "No job selected";
+        ImGui.TextDisabled(job);
+        ImGui.Spacing();
+        this.NavItem(UiText.PageParses, SettingsPage.Parses);
+        this.NavItem(UiText.PageActions, SettingsPage.Actions);
+        this.NavItem(UiText.PageRotation, SettingsPage.Rotation);
+    }
+
+    private void NavItem(string label, SettingsPage target)
+    {
+        var selected = this.page == target;
+        if (ImGui.Selectable(label, selected, ImGuiSelectableFlags.None, new Vector2(0f, 32f)))
+            this.page = target;
+
+        if (!selected)
+            return;
+
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        ImGui.GetWindowDrawList().AddRectFilled(
+            min,
+            new Vector2(min.X + 3f, max.Y),
+            ImGui.GetColorU32(new Vector4(0.96f, 0.78f, 0.32f, 1f)));
+    }
+
+    private void DrawHeading(GuideSnapshot view)
+    {
+        var (title, subtitle) = this.page switch
+        {
+            SettingsPage.Actions => (UiText.PageActions, UiText.ActionsIntro),
+            SettingsPage.Rotation => (UiText.PageRotation, UiText.RotationIntro),
+            _ => (UiText.PageParses, this.ParseSubtitle(view)),
+        };
+
+        ImGui.Text(title);
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.70f, 0.70f, 0.72f, 1f)))
+            ImGui.TextWrapped(subtitle);
+        ImGui.Separator();
+    }
+
+    private string ParseSubtitle(GuideSnapshot view)
+    {
+        var ultimate = UltimateCatalog.GetOrFirst(view.EncounterId).Label;
+        var job = JobCatalog.Find(view.JobSpec)?.EnglishName ?? "choose a job";
+        return $"{ultimate} · {job}";
+    }
+
+    private void DrawParses(GuideSnapshot view)
+    {
         ImGui.TextDisabled(UiText.CredentialsHint);
         ImGui.Text("Client ID");
         ImGui.InputText("##client-id", ref this.clientId, 200);
@@ -88,7 +196,8 @@ internal sealed class SetupWindow : Window
 
         ImGui.EndDisabled();
 
-        using (var rankings = ImRaii.Child("rankings", new Vector2(0, 220), true))
+        var listHeight = MathF.Max(160f, ImGui.GetContentRegionAvail().Y - 72f);
+        using (var rankings = ImRaii.Child("rankings", new Vector2(0, listHeight), true))
         {
             if (rankings.Success)
             {
@@ -118,6 +227,17 @@ internal sealed class SetupWindow : Window
             }
         }
 
+        if (!string.IsNullOrEmpty(view.Error))
+            ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), view.Error);
+        else if (!string.IsNullOrEmpty(view.Status))
+            ImGui.TextWrapped(view.Status);
+
+        if (!string.IsNullOrEmpty(view.DutyStatus))
+            ImGui.TextWrapped(view.DutyStatus);
+    }
+
+    private void DrawRotation(GuideSnapshot view)
+    {
         var includeOffGcds = view.IncludeOffGcds;
         if (ImGui.Checkbox("Include oGCDs", ref includeOffGcds) && includeOffGcds != view.IncludeOffGcds)
             this.controller.SetIncludeOffGcds(includeOffGcds);
@@ -132,20 +252,16 @@ internal sealed class SetupWindow : Window
             this.controller.SetUseGemdraught(useGemdraught);
         ImGui.TextDisabled(UiText.UseGemdraughtHint);
 
-        if (ImGui.Button("Actions"))
-            this.actions.Toggle();
-        ImGui.SameLine();
-        ImGui.TextDisabled("Choose which actions may be used.");
-
-        if (!string.IsNullOrEmpty(view.Error))
-            ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), view.Error);
-        else if (!string.IsNullOrEmpty(view.Status))
-            ImGui.TextWrapped(view.Status);
+        ImGui.Separator();
+        ImGui.TextWrapped("Each ability is chosen on the Actions page. Mitigations start off.");
+        if (ImGui.Button("Open Actions"))
+            this.page = SettingsPage.Actions;
 
         if (!string.IsNullOrEmpty(view.DutyStatus))
+        {
+            ImGui.Spacing();
             ImGui.TextWrapped(view.DutyStatus);
-
-        ImGui.TextDisabled("In the selected ultimate, the guide follows the fight from pull start. Leaving the zone or a wipe resets it. With automatic rotation on, a striking dummy does the same.");
+        }
     }
 
     private void PersistCredentials()

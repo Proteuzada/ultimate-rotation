@@ -2,7 +2,14 @@ namespace UltimateRotation;
 
 public sealed record LogAction(uint ActionId, string Name, StepKind Kind);
 
-public sealed record ActionChoice(uint ActionId, string Name, StepKind Kind, bool Mitigation, bool Potion, bool Enabled);
+public sealed record ActionChoice(
+    uint ActionId,
+    string Name,
+    StepKind Kind,
+    bool Mitigation,
+    bool Potion,
+    bool Enabled,
+    bool InParse = false);
 
 /// <summary>
 /// The Actions menu. Mitigations start disabled. Every other action from the parse starts enabled.
@@ -61,13 +68,14 @@ public static class ActionMenu
                 action.Kind,
                 mitigation,
                 false,
-                Allows(action.ActionId, action.Name, useGemdraught, disabled, enabledMitigations));
+                Allows(action.ActionId, action.Name, useGemdraught, disabled, enabledMitigations),
+                true);
         }
 
         var choices = byId.Values.ToList();
         if (sawGemdraught)
         {
-            choices.Add(new ActionChoice(0, "Gemdraught", StepKind.OffGcd, false, true, useGemdraught));
+            choices.Add(new ActionChoice(0, "Gemdraught", StepKind.OffGcd, false, true, useGemdraught, true));
         }
 
         return choices

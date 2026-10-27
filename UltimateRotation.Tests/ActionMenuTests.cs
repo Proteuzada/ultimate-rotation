@@ -28,7 +28,8 @@ public class ActionMenuTests
 
         Assert.Contains(menu, choice => choice.Name == "Rampart" && choice.Mitigation && !choice.Enabled);
         Assert.Contains(menu, choice => choice.Name == "The Blackest Night" && !choice.Enabled);
-        Assert.Contains(menu, choice => choice.Name == "Hard Slash" && !choice.Mitigation && choice.Enabled);
+        Assert.Contains(menu, choice => choice.Name == "Hard Slash" && !choice.Mitigation && choice.Enabled && choice.InParse);
+        Assert.Contains(menu, choice => choice.Name == "The Blackest Night" && !choice.InParse);
         Assert.Contains(menu, choice => choice.Potion && !choice.Enabled);
         Assert.DoesNotContain(menu, choice => choice.Name == "Feint");
     }

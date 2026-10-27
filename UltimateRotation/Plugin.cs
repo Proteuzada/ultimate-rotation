@@ -24,25 +24,23 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
 
     private readonly WindowSystem windowSystem;
     private readonly GuideController controller;
     private readonly ActionObserver observer;
     private readonly SetupWindow setup;
     private readonly OverlayWindow overlay;
-    private readonly ActionsWindow actions;
 
     public Plugin()
     {
         var configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         this.controller = new GuideController(configuration);
-        this.actions = new ActionsWindow(this.controller);
-        this.setup = new SetupWindow(configuration, this.controller, this.actions);
-        this.overlay = new OverlayWindow(this.controller, this.actions);
+        this.setup = new SetupWindow(configuration, this.controller);
+        this.overlay = new OverlayWindow(this.controller, () => this.setup.OpenPage(SettingsPage.Actions));
         this.windowSystem = new WindowSystem("UltimateRotation");
         this.windowSystem.AddWindow(this.setup);
         this.windowSystem.AddWindow(this.overlay);
-        this.windowSystem.AddWindow(this.actions);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
         {
@@ -107,7 +105,7 @@ public sealed class Plugin : IDalamudPlugin
         if (argument.Equals("overlay", StringComparison.OrdinalIgnoreCase))
             this.overlay.Toggle();
         else if (argument.Equals("actions", StringComparison.OrdinalIgnoreCase))
-            this.actions.Toggle();
+            this.setup.OpenPage(SettingsPage.Actions);
         else
             this.setup.Toggle();
     }

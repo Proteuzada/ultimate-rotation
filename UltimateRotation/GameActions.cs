@@ -1,6 +1,7 @@
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using LuminaAction = Lumina.Excel.Sheets.Action;
+using LuminaItem = Lumina.Excel.Sheets.Item;
 
 namespace UltimateRotation;
 
@@ -69,6 +70,30 @@ internal static class GameActions
         }
 
         return true;
+    }
+
+    public static uint IconId(uint actionId, IDataManager data)
+    {
+        if (!TryGetAction(actionId, data, out var action))
+            return 0;
+
+        return (uint)action.Icon;
+    }
+
+    public static uint ItemIconId(uint itemId, IDataManager data)
+    {
+        try
+        {
+            var sheet = data.GetExcelSheet<LuminaItem>();
+            if (!sheet.TryGetRow(itemId, out var item))
+                return 0;
+
+            return (uint)item.Icon;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public static unsafe uint Adjusted(uint actionId)

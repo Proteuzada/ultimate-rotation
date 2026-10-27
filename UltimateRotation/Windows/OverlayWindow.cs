@@ -7,13 +7,13 @@ namespace UltimateRotation.Windows;
 internal sealed class OverlayWindow : Window
 {
     private readonly GuideController controller;
-    private readonly ActionsWindow actions;
+    private readonly Action openActions;
 
-    public OverlayWindow(GuideController controller, ActionsWindow actions)
+    public OverlayWindow(GuideController controller, Action openActions)
         : base(UiText.OverlayTitle, ImGuiWindowFlags.NoScrollbar)
     {
         this.controller = controller;
-        this.actions = actions;
+        this.openActions = openActions;
         this.SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(280, 180),
@@ -52,7 +52,7 @@ internal sealed class OverlayWindow : Window
             this.controller.SetUseGemdraught(useGemdraught);
         ImGui.TextDisabled(UiText.UseGemdraughtHint);
         if (ImGui.Button("Actions"))
-            this.actions.Toggle();
+            this.openActions();
 
         var index = view.Index;
         var phase = index < playback.Steps.Count
