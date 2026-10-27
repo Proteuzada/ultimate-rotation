@@ -62,7 +62,7 @@ internal static class GameActions
             return true;
         }
 
-        if (action.CanTargetParty || action.CanTargetFriendly)
+        if (action.CanTargetParty)
         {
             kind = ActionTargetKind.OtherPlayer;
             return true;

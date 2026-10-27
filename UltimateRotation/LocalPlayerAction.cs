@@ -24,7 +24,7 @@ internal static class LocalPlayerAction
             if (actionId == 0)
                 return ActionAttempt.Impossible;
 
-            var player = Plugin.ClientState.LocalPlayer;
+            var player = Plugin.Objects.LocalPlayer;
             var manager = ActionManager.Instance();
             if (player == null || manager == null)
                 return ActionAttempt.Blocked;
@@ -66,7 +66,7 @@ internal static class LocalPlayerAction
                 return false;
             case ActionTargetKind.Hostile:
                 var current = Plugin.TargetManager.Target;
-                if (current == null || current.ObjectKind == ObjectKind.Player || current.GameObjectId == 0)
+                if (current == null || current.ObjectKind == ObjectKind.Pc || current.GameObjectId == 0)
                 {
                     waitingForTarget = true;
                     return false;
