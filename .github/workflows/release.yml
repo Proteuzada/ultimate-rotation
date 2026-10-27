@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    if: github.event_name == 'push' || github.event.release.author.login != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:RUNNER_TEMP 'dalamud'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $distZip = Join-Path $dest 'dalamud.zip'
+          Invoke-WebRequest -Uri 'https://goatcorp.github.io/dalamud-distrib/latest.zip' -OutFile $distZip
+          Expand-Archive -Force $distZip -DestinationPath $dest
+          $dalamud = Get-ChildItem -Path $dest -Recurse -Filter Dalamud.dll | Select-Object -First 1
+          if (-not $dalamud) { throw 'Dalamud.dll was not in the distribution zip' }
+          $env:DALAMUD_HOME = $dalamud.DirectoryName
+          Write-Host "DALAMUD_HOME=$env:DALAMUD_HOME"
+          dotnet build UltimateRotation.sln -c Release --nologo "-p:RepoUrl=https://github.com/$env:GITHUB_REPOSITORY"
+          if ($LASTEXITCODE -ne 0) { throw "dotnet build exited $LASTEXITCODE" }
+
+      - name: Package plugin zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packed = Get-ChildItem -Recurse -File -Filter latest.zip |
+            Where-Object { $_.Directory.Name -eq 'UltimateRotation' } |
+            Select-Object -First 1
+          if (-not $packed) { throw 'DalamudPackager did not produce UltimateRotation/latest.zip' }
+          Copy-Item $packed.FullName (Join-Path (Get-Location) 'UltimateRotation.zip') -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path (Get-Location) 'UltimateRotation.zip'))
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName -replace '\\','/' })
+            $names | ForEach-Object { Write-Host $_ }
+            foreach ($required in @('UltimateRotation.dll','UltimateRotation.json','UltimateRotation.Core.dll')) {
+              if ($names -notcontains $required) { throw "Release zip is missing $required" }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+          $manifestFile = Get-ChildItem -Recurse -File -Filter UltimateRotation.json |
+            Where-Object { $_.FullName -notmatch '\\obj\\' -and $_.Directory.Name -ne 'UltimateRotation' } |
+            Select-Object -First 1
+          if (-not $manifestFile) { throw 'Built UltimateRotation.json was not found' }
+          $manifest = Get-Content -Raw $manifestFile.FullName | ConvertFrom-Json
+          $repo = $env:GITHUB_REPOSITORY
+          $tag = $env:RELEASE_TAG
+          $zipUrl = "https://github.com/$repo/releases/download/$tag/UltimateRotation.zip"
+          $entry = [ordered]@{
+            Author = $manifest.Author
+            Name = $manifest.Name
+            Punchline = $manifest.Punchline
+            Description = $manifest.Description
+            InternalName = $manifest.InternalName
+            AssemblyVersion = $manifest.AssemblyVersion
+            TestingAssemblyVersion = $null
+            RepoUrl = "https://github.com/$repo"
+            ApplicableVersion = if ($manifest.ApplicableVersion) { $manifest.ApplicableVersion } else { 'any' }
+            DalamudApiLevel = $manifest.DalamudApiLevel
+            Tags = @($manifest.Tags)
+            IsHide = $false
+            IsTestingExclusive = $false
+            DownloadLinkInstall = $zipUrl
+            DownloadLinkTesting = $zipUrl
+            DownloadLinkUpdate = $zipUrl
+            DownloadCount = 0
+            LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          }
+          $json = ConvertTo-Json -InputObject @($entry) -Depth 6
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) 'repo.json'), $json.Trim() + "`n")
+          Get-Content repo.json | Write-Host
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f UltimateRotation.zip
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" UltimateRotation.zip repo.json --clobber
+          else
+            gh release create "$RELEASE_TAG" UltimateRotation.zip repo.json \
+              --title "$RELEASE_TAG" \
+              --notes "Guia de Rotação Ultimate ${RELEASE_TAG}"
+          fi
+
+      - name: Publish repo.json on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp repo.json "$RUNNER_TEMP/repo.json"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/repo.json" repo.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add repo.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish Dalamud manifest for ${RELEASE_TAG}"
+            git push origin main
+          fi

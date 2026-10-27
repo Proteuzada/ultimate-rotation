@@ -1,0 +1,18 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Author>Proteu</Author>
+    <Name>Guia de Rotação Ultimate</Name>
+    <Punchline>Mostra a sequência de um pull de ultimate do FFLogs.</Punchline>
+    <Description>Lê um relatório público do FFLogs e monta um guia com a ordem das habilidades. O guia avança quando você usa a habilidade esperada. Não reproduz o tempo do log e não aperta nenhum botão.</Description>
+    <Tags>ultimate;rotacao;fflogs</Tags>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>UltimateRotation</RootNamespace>
+    <AssemblyName>UltimateRotation</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UltimateRotation.Core\UltimateRotation.Core.csproj" />
+  </ItemGroup>
+</Project>
