@@ -20,23 +20,28 @@ public class FflogsClientTests
             Assert.Equal("Bearer", request.Authorization?.Scheme);
             Assert.Equal("token-1", request.Authorization?.Parameter);
             Assert.DoesNotContain(Secret, request.Body, StringComparison.Ordinal);
-            Assert.Contains("characterRankings", request.Body, StringComparison.Ordinal);
-            Assert.Contains("metric: rdps", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("rankings {", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("rankPercent", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("fightID", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("includeOtherPlayers", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("playerspeed", request.Body, StringComparison.Ordinal);
-            Assert.Contains("specName", request.Body, StringComparison.Ordinal);
-            Assert.Contains("Reaper", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("fightRankings", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("/zone/rankings", request.Body, StringComparison.Ordinal);
+            if (request.Body.Contains("fightRankings", StringComparison.Ordinal))
+            {
+                Assert.DoesNotContain("playerMetric", request.Body, StringComparison.Ordinal);
+                return Json(HttpStatusCode.OK, """
+                    {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","fightRankings":{"hasMorePages":false,"rankings":[
+                      {"duration":600000,"report":{"code":"abcdefghijklmnop","fightID":12}}
+                    ]}}}}}
+                    """);
+            }
+
+            Assert.Contains("playerMetric: rdps", request.Body, StringComparison.Ordinal);
+            Assert.Contains("abcdefghijklmnop", request.Body, StringComparison.Ordinal);
             return Json(HttpStatusCode.OK, """
-                {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","characterRankings":{"rankings":[
-                  {"rank":40,"rankPercent":99.4,"name":"Example","report":{"code":"abcdefghijklmnop","fightID":12},"server":{"name":"Leviathan","region":"NA"}},
-                  {"rank":3,"rankPercent":100,"name":"Other","report":{"code":"bbcdefghijklmnop","fightID":4},"server":{"name":"Sargatanas","region":"NA"}},
-                  {"rank":80,"rankPercent":98,"name":"Third","report":{"code":"cbcdefghijklmnop","fightID":8},"server":{"name":"Exodus","region":"NA"}}
-                ]}}}}}
+                {"data":{"reportData":{"r0":{"rankings":{"data":[{"fightID":12,"roles":{"dps":{"characters":[
+                  {"name":"Example","class":"Reaper","spec":"Reaper","rank":"40","rankPercent":99.4,"server":{"name":"Leviathan","region":"NA"}},
+                  {"name":"Other","class":"Reaper","spec":"Reaper","rank":"3","rankPercent":100,"server":{"name":"Sargatanas","region":"NA"}},
+                  {"name":"Third","class":"Reaper","spec":"Reaper","rank":"80","rankPercent":98,"server":{"name":"Exodus","region":"NA"}},
+                  {"name":"Tank","class":"DarkKnight","spec":"DarkKnight","rank":"1","rankPercent":100,"server":{"name":"Exodus","region":"NA"}}
+                ]}}}]}}}}}
                 """);
         });
 
@@ -71,36 +76,37 @@ public class FflogsClientTests
         handler.When(FflogsClient.GraphqlEndpoint, request =>
         {
             Assert.DoesNotContain("rankings {", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("fightID", request.Body, StringComparison.Ordinal);
-            Assert.DoesNotContain("includeOtherPlayers", request.Body, StringComparison.Ordinal);
-            if (request.Body.Contains("\"page\":1", StringComparison.Ordinal))
+            if (request.Body.Contains("fightRankings", StringComparison.Ordinal))
             {
+                if (request.Body.Contains("\"page\":1", StringComparison.Ordinal))
+                {
+                    return Json(HttpStatusCode.OK, """
+                        {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","fightRankings":{
+                          "hasMorePages":true,
+                          "rankings":[{"report":{"code":"abcdefghijklmnop","fightID":1}}]
+                        }}}}}
+                        """);
+                }
+
                 return Json(HttpStatusCode.OK, """
-                    {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","characterRankings":{
-                      "hasMorePages":true,
-                      "rankings":[
-                        {"rank":1,"rankPercent":100,"name":"Gold","report":{"code":"abcdefghijklmnop","fightID":1},"server":{"name":"Leviathan","region":"NA"}}
-                      ]
+                    {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","fightRankings":{
+                      "hasMorePages":false,
+                      "rankings":[{"report":{"code":"bbcdefghijklmnop","fightID":2}}]
                     }}}}}
                     """);
             }
 
-            Assert.Contains("\"page\":2", request.Body, StringComparison.Ordinal);
+            Assert.Contains("playerMetric: rdps", request.Body, StringComparison.Ordinal);
             return Json(HttpStatusCode.OK, """
-                {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","characterRankings":{
-                  "hasMorePages":false,
-                  "rankings":[
-                    {"rank":20,"rankPercent":99,"name":"Pink","report":{"code":"bbcdefghijklmnop","fightID":2},"server":{"name":"Sargatanas","region":"NA"}},
-                    {"rank":40,"rankPercent":98.2,"name":"Orange","report":{"code":"cbcdefghijklmnop","fightID":3},"server":{"name":"Exodus","region":"NA"}}
-                  ]
-                }}}}
+                {"data":{"reportData":{"r0":{"rankings":{"data":[{"roles":{"tanks":{"characters":[{"name":"Gold","class":"DarkKnight","spec":"DarkKnight","rank":"1","rankPercent":100,"server":{"name":"Leviathan","region":"NA"}}]}}}]}},"r1":{"rankings":{"data":[{"roles":{"tanks":{"characters":[{"name":"Pink","class":"DarkKnight","spec":"DarkKnight","rank":"20","rankPercent":99,"server":{"name":"Sargatanas","region":"NA"}},{"name":"Orange","class":"DarkKnight","spec":"DarkKnight","rank":"40","rankPercent":98.2,"server":{"name":"Exodus","region":"NA"}}]}}}]}}}}}
                 """);
         });
 
         using var client = new FflogsClient(handler);
         var rankings = await client.GetJobParseRankingsAsync("client-id", Secret, 1079, "DarkKnight", CancellationToken.None);
 
-        Assert.Equal(2, handler.Requests.Count(request => request.Url == FflogsClient.GraphqlEndpoint));
+        Assert.Equal(2, handler.Requests.Count(request => request.Body.Contains("fightRankings", StringComparison.Ordinal)));
+        Assert.Contains(handler.Requests, request => request.Body.Contains("playerMetric: rdps", StringComparison.Ordinal));
         Assert.Equal([100, 99, 98], rankings.Select(row => row.Parse).ToArray());
     }
 

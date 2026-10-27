@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7.1");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7.2");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -52,86 +52,71 @@ public sealed class FflogsClient : IDisposable
         string specName,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(specName))
-            throw new FflogsException("Choose a job.");
+        var job = JobCatalog.Find(specName) ?? throw new FflogsException("Choose a job.");
+        var kills = await this.LoadKillsAsync(clientId, clientSecret, encounterId, includeSize: true, cancellationToken)
+            .ConfigureAwait(false);
+        if (kills.Count == 0)
+        {
+            kills = await this.LoadKillsAsync(clientId, clientSecret, encounterId, includeSize: false, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
-        // characterRankings is a JSON scalar. A selection set is rejected:
-        // Field "characterRankings" of type "JSON" must not have a sub selection.
-        // The payload still contains rankings, rankPercent, report, and server.
-        var query = $$"""
-            query JobParseRankings($encounterID: Int!, $specName: String!, $page: Int!) {
-              worldData {
-                encounter(id: $encounterID) {
-                  name
-                  characterRankings(
-                    metric: rdps
-                    difficulty: {{UltimateCatalog.Difficulty}}
-                    size: {{UltimateCatalog.PartySize}}
-                    specName: $specName
-                    page: $page
-                  )
-                }
-              }
-            }
-            """;
+        if (kills.Count == 0)
+            throw new FflogsException("FFLogs did not return kills for this ultimate.");
 
         var groups = new Dictionary<int, List<RankedReport>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var total = 0;
 
-        for (var page = 1; page <= UltimateCatalog.MaxRankingPages; page++)
+        for (var offset = 0; offset < kills.Count; offset += 8)
         {
+            var batch = kills.Skip(offset).Take(8).ToList();
             var data = await this.QueryAsync(
                 clientId,
                 clientSecret,
-                query,
-                new Dictionary<string, object?>
-                {
-                    ["encounterID"] = encounterId,
-                    ["specName"] = specName,
-                    ["page"] = page,
-                },
+                BuildClassRankingsQuery(batch),
+                new Dictionary<string, object?> { ["encounterID"] = encounterId },
                 cancellationToken).ConfigureAwait(false);
 
-            var encounter = Require(Require(data, "worldData"), "encounter");
-            if (encounter.ValueKind is JsonValueKind.Null)
-                throw new FflogsException("FFLogs does not know this ultimate.");
-
-            var rankings = Unwrap(Require(encounter, "characterRankings"));
-            if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-                throw new FflogsException("FFLogs did not return rankings for this job.");
-
-            if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
-                throw new FflogsException("FFLogs did not return the rankings list.");
-
+            var reportData = Require(data, "reportData");
             var lowest = int.MaxValue;
-            var rowCount = 0;
-            foreach (var row in rows.EnumerateArray())
+            for (var index = 0; index < batch.Count; index++)
             {
-                rowCount++;
-                if (!TryReadRank(row, total + 1, out var ranked))
+                if (!reportData.TryGetProperty($"r{index}", out var report)
+                    || report.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined
+                    || !report.TryGetProperty("rankings", out var rankings)
+                    || rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
                     continue;
 
-                lowest = Math.Min(lowest, ranked.Parse);
-                var key = $"{ranked.Code}:{ranked.FightId}:{ranked.Player}";
-                if (!seen.Add(key))
-                    continue;
-                if (!groups.TryGetValue(ranked.Parse, out var bucket))
+                foreach (var character in EnumerateRankingCharacters(Unwrap(rankings)))
                 {
-                    bucket = [];
-                    groups[ranked.Parse] = bucket;
+                    if (!TryReadClassRank(character, job, batch[index], out var ranked))
+                        continue;
+
+                    lowest = Math.Min(lowest, ranked.Parse);
+                    var key = $"{ranked.Code}:{ranked.FightId}:{ranked.Player}";
+                    if (!seen.Add(key))
+                        continue;
+                    if (!groups.TryGetValue(ranked.Parse, out var bucket))
+                    {
+                        bucket = [];
+                        groups[ranked.Parse] = bucket;
+                    }
+
+                    if (bucket.Count >= UltimateCatalog.RowsPerParse)
+                        continue;
+
+                    bucket.Add(ranked);
+                    total++;
+                    if (total >= UltimateCatalog.RankingLimit)
+                        break;
                 }
 
-                if (bucket.Count >= UltimateCatalog.RowsPerParse)
-                    continue;
-
-                bucket.Add(ranked);
-                total++;
                 if (total >= UltimateCatalog.RankingLimit)
                     break;
             }
 
-            if (total >= UltimateCatalog.RankingLimit || rowCount == 0 || !HasMorePages(rankings, rowCount))
+            if (total >= UltimateCatalog.RankingLimit)
                 break;
             if (ParseGroupsFilled(groups, lowest == int.MaxValue ? 0 : lowest))
                 break;
@@ -144,44 +129,227 @@ public sealed class FflogsClient : IDisposable
             .ToList();
     }
 
-    private static bool TryReadRank(JsonElement row, int fallbackRank, out RankedReport ranked)
+    private async Task<List<EncounterKill>> LoadKillsAsync(
+        string clientId,
+        string clientSecret,
+        int encounterId,
+        bool includeSize,
+        CancellationToken cancellationToken)
+    {
+        var sizeArgument = includeSize ? $"\n                    size: {UltimateCatalog.PartySize}" : string.Empty;
+        var query = $$"""
+            query EncounterKills($encounterID: Int!, $page: Int!) {
+              worldData {
+                encounter(id: $encounterID) {
+                  name
+                  fightRankings(
+                    difficulty: {{UltimateCatalog.Difficulty}}{{sizeArgument}}
+                    page: $page
+                  )
+                }
+              }
+            }
+            """;
+
+        var kills = new List<EncounterKill>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var page = 1; page <= 3 && kills.Count < 24; page++)
+        {
+            var data = await this.QueryAsync(
+                clientId,
+                clientSecret,
+                query,
+                new Dictionary<string, object?>
+                {
+                    ["encounterID"] = encounterId,
+                    ["page"] = page,
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            var encounter = Require(Require(data, "worldData"), "encounter");
+            if (encounter.ValueKind is JsonValueKind.Null)
+                throw new FflogsException("FFLogs does not know this ultimate.");
+
+            var rankings = Unwrap(Require(encounter, "fightRankings"));
+            if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                break;
+            if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
+                break;
+
+            var rowCount = 0;
+            foreach (var row in rows.EnumerateArray())
+            {
+                rowCount++;
+                if (row.ValueKind != JsonValueKind.Object)
+                    continue;
+                if (row.TryGetProperty("hidden", out var hidden) && hidden.ValueKind is JsonValueKind.True)
+                    continue;
+                if (!row.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var code = ReadString(report, "code");
+                if (!ReportCode.TryExtract(code, out var parsed, out _))
+                    continue;
+
+                var fightId = ReadInt(report, "fightID", "fightId");
+                if (fightId <= 0 || !seen.Add($"{parsed}:{fightId}"))
+                    continue;
+
+                kills.Add(new EncounterKill(parsed, fightId, ReadDouble(row, "duration")));
+                if (kills.Count >= 24)
+                    break;
+            }
+
+            if (rowCount == 0 || !HasMorePages(rankings, rowCount))
+                break;
+        }
+
+        return kills;
+    }
+
+    private static string BuildClassRankingsQuery(IReadOnlyList<EncounterKill> kills)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("query ClassRankings($encounterID: Int!) {");
+        builder.AppendLine("  reportData {");
+        for (var index = 0; index < kills.Count; index++)
+        {
+            var kill = kills[index];
+            builder.AppendLine($"    r{index}: report(code: \"{kill.Code}\") {{");
+            builder.AppendLine($"      rankings(encounterID: $encounterID, fightIDs: [{kill.FightId}], playerMetric: rdps)");
+            builder.AppendLine("    }");
+        }
+
+        builder.AppendLine("  }");
+        builder.Append('}');
+        return builder.ToString();
+    }
+
+    private static bool TryReadClassRank(
+        JsonElement row,
+        CombatJob job,
+        EncounterKill kill,
+        out RankedReport ranked)
     {
         ranked = null!;
         if (row.ValueKind != JsonValueKind.Object)
             return false;
         if (row.TryGetProperty("hidden", out var hidden) && hidden.ValueKind is JsonValueKind.True)
             return false;
-        if (!row.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Object)
+
+        var spec = ReadString(row, "spec");
+        var jobName = ReadString(row, "class");
+        if (!JobCatalog.Matches(job, spec) && !JobCatalog.Matches(job, jobName))
             return false;
 
-        var player = ReadString(row, "name")
-            ?? ReadString(row, "characterName")
-            ?? ReadString(Child(row, "character"), "name");
+        var player = ReadString(row, "name");
         if (string.IsNullOrWhiteSpace(player))
             return false;
 
-        var code = ReadString(report, "code");
-        if (!ReportCode.TryExtract(code, out var parsed, out _))
-            return false;
-
-        var parse = RankedReport.ParsePercent(ReadDouble(row, "rankPercent"));
+        var parse = RankedReport.ParsePercent(
+            ReadDouble(row, "rankPercent")
+            ?? ReadDouble(row, "bracketPercent")
+            ?? ReadDouble(row, "percentile"));
         if (parse < 0)
             return false;
 
-        var rank = ReadInt(row, "rank");
-        if (rank <= 0)
-            rank = fallbackRank;
+        var rank = ReadRank(row);
+        var fightId = ReadInt(row, "fightID", "fightId");
+        if (fightId <= 0)
+            fightId = kill.FightId;
 
         ranked = new RankedReport(
             rank,
             player,
-            parsed,
-            ReadInt(report, "fightID", "fightId"),
-            ReadDouble(row, "duration"),
+            kill.Code,
+            fightId,
+            ReadDouble(row, "duration") ?? kill.DurationMs,
             JoinServer(Child(row, "server")),
             parse);
         return true;
     }
+
+    private static IEnumerable<JsonElement> EnumerateRankingCharacters(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data))
+        {
+            foreach (var character in EnumerateRankingCharacters(data))
+                yield return character;
+            yield break;
+        }
+
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in root.EnumerateArray())
+            {
+                foreach (var character in EnumerateRankingCharacters(item))
+                    yield return character;
+            }
+
+            yield break;
+        }
+
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("roles", out var roles))
+            yield break;
+
+        if (roles.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var role in roles.EnumerateArray())
+            {
+                foreach (var character in CharactersOf(role))
+                    yield return character;
+            }
+
+            yield break;
+        }
+
+        if (roles.ValueKind != JsonValueKind.Object)
+            yield break;
+
+        foreach (var role in roles.EnumerateObject())
+        {
+            foreach (var character in CharactersOf(role.Value))
+                yield return character;
+        }
+    }
+
+    private static IEnumerable<JsonElement> CharactersOf(JsonElement role)
+    {
+        var characters = role;
+        if (characters.ValueKind == JsonValueKind.Object
+            && characters.TryGetProperty("characters", out var nested))
+            characters = nested;
+        if (characters.ValueKind != JsonValueKind.Array)
+            yield break;
+
+        foreach (var character in characters.EnumerateArray())
+        {
+            if (character.ValueKind == JsonValueKind.Object)
+                yield return character;
+        }
+    }
+
+    private static int ReadRank(JsonElement row)
+    {
+        if (!row.TryGetProperty("rank", out var rank))
+            return 0;
+        if (rank.ValueKind == JsonValueKind.Number)
+            return rank.TryGetInt32(out var whole) ? whole : (int)rank.GetDouble();
+        if (rank.ValueKind != JsonValueKind.String)
+            return 0;
+
+        var text = rank.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+            return 0;
+
+        var length = 0;
+        while (length < text.Length && char.IsDigit(text[length]))
+            length++;
+
+        return length > 0 && int.TryParse(text[..length], out var parsed) ? parsed : 0;
+    }
+
+    private readonly record struct EncounterKill(string Code, int FightId, double? DurationMs);
 
     private static bool HasMorePages(JsonElement rankings, int rowCount)
     {

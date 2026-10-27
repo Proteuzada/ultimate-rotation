@@ -5,7 +5,7 @@
     "Punchline": "Shows one player's ability order from an FFLogs ultimate pull.",
     "Description": "Loads one job's public FFLogs rDPS parses for an ultimate, grouped by percentile, and shows that player's ability order. In the selected ultimate, the guide starts at the pull and follows the fight, and it resets if you leave or wipe. Automatic rotation is off until you enable it. It then presses each due step for you and skips a step that cannot be used.",
     "InternalName": "UltimateRotation",
-    "AssemblyVersion": "0.7.1.0",
+    "AssemblyVersion": "0.7.2.0",
     "TestingAssemblyVersion": null,
     "RepoUrl": "https://github.com/Proteuzada/ultimate-rotation",
     "ApplicableVersion": "any",
@@ -17,9 +17,9 @@
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.1/UltimateRotation.zip",
-    "DownloadLinkTesting": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.1/UltimateRotation.zip",
-    "DownloadLinkUpdate": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.1/UltimateRotation.zip",
+    "DownloadLinkInstall": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.2/UltimateRotation.zip",
+    "DownloadLinkTesting": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.2/UltimateRotation.zip",
+    "DownloadLinkUpdate": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.7.2/UltimateRotation.zip",
     "DownloadCount": 0,
     "LastUpdate": 1793130410
   }

@@ -568,8 +568,8 @@ internal sealed class GuideController : IDisposable
                 this.busy = false;
                 var job = JobCatalog.Find(spec)?.EnglishName ?? spec;
                 this.status = rows.Count == 0
-                    ? $"No parses for {job}."
-                    : $"{rows.Count} {job} parses, grouped by percentile.";
+                    ? $"No {job} parses on recent kills."
+                    : $"{rows.Count} {job} parses from the class rankings, grouped by percentile.";
             }
         }
         catch (OperationCanceledException)
