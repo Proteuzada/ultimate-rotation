@@ -20,17 +20,21 @@ public class FflogsClientTests
             Assert.Equal("Bearer", request.Authorization?.Scheme);
             Assert.Equal("token-1", request.Authorization?.Parameter);
             Assert.DoesNotContain(Secret, request.Body, StringComparison.Ordinal);
-            Assert.Contains("fightRankings(metric: speed", request.Body, StringComparison.Ordinal);
+            Assert.Contains("characterRankings", request.Body, StringComparison.Ordinal);
+            Assert.Contains("metric: playerspeed", request.Body, StringComparison.Ordinal);
+            Assert.Contains("specName", request.Body, StringComparison.Ordinal);
+            Assert.Contains("Reaper", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("fightRankings", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("/zone/rankings", request.Body, StringComparison.Ordinal);
             return Json(HttpStatusCode.OK, """
-                {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","fightRankings":{"rankings":[
-                  {"rank":1,"duration":754000,"report":{"code":"abcdefghijklmnop","fightID":12},"guild":{"name":"Exemplo"},"server":{"name":"Leviathan","region":"NA"}}
+                {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","characterRankings":{"rankings":[
+                  {"rank":1,"name":"Example","duration":754000,"report":{"code":"abcdefghijklmnop","fightID":12},"server":{"name":"Leviathan","region":"NA"}}
                 ]}}}}}
                 """);
         });
 
         using var client = new FflogsClient(handler);
-        var rankings = await client.GetSpeedRankingsAsync("client-id", Secret, 1079, CancellationToken.None);
+        var rankings = await client.GetJobSpeedRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None);
 
         Assert.Equal(FflogsClient.TokenEndpoint, handler.Requests[0].Url);
         Assert.Equal("Basic", handler.Requests[0].Authorization?.Scheme);
@@ -43,7 +47,7 @@ public class FflogsClientTests
         Assert.Equal("abcdefghijklmnop", row.Code);
         Assert.Equal(12, row.FightId);
         Assert.Equal(754000, row.DurationMs);
-        Assert.Equal("Exemplo", row.Team);
+        Assert.Equal("Example", row.Player);
         Assert.Equal("Leviathan (NA)", row.Server);
     }
 
@@ -120,7 +124,7 @@ public class FflogsClientTests
 
         using var client = new FflogsClient(handler);
         var error = await Assert.ThrowsAsync<FflogsException>(() =>
-            client.GetSpeedRankingsAsync("client-id", Secret, 1079, CancellationToken.None));
+            client.GetJobSpeedRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None));
 
         Assert.DoesNotContain(Secret, error.Message, StringComparison.Ordinal);
         Assert.Contains("authenticate", error.Message, StringComparison.OrdinalIgnoreCase);

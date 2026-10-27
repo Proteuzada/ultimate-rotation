@@ -14,6 +14,12 @@ internal sealed class GuideSnapshot
 
     public int EncounterId { get; init; }
 
+    public string? JobSpec { get; init; }
+
+    public string? SelectedPlayer { get; init; }
+
+    public string? SelectedCode { get; init; }
+
     public int? FightId { get; init; }
 
     public int? ActorId { get; init; }
@@ -45,6 +51,9 @@ internal sealed class GuideController : IDisposable
     private IReadOnlyList<RankedReport> rankings = [];
     private LoadedReport? report;
     private int encounterId;
+    private string? jobSpec;
+    private string? rankedPlayer;
+    private string? rankedCode;
     private int? fightId;
     private int? actorId;
     private int? preferredFightId;
@@ -60,6 +69,7 @@ internal sealed class GuideController : IDisposable
     {
         this.configuration = configuration;
         this.encounterId = UltimateCatalog.GetOrFirst(configuration.LastEncounterId).EncounterId;
+        this.jobSpec = JobCatalog.Find(configuration.LastJobSpec)?.SpecName;
         this.includeOffGcds = configuration.IncludeOffGcds;
     }
 
@@ -75,6 +85,9 @@ internal sealed class GuideController : IDisposable
                 Rankings = this.rankings,
                 Report = this.report,
                 EncounterId = this.encounterId,
+                JobSpec = this.jobSpec,
+                SelectedPlayer = this.rankedPlayer,
+                SelectedCode = this.rankedCode,
                 FightId = this.fightId,
                 ActorId = this.actorId,
                 PreferredFightId = this.preferredFightId,
@@ -91,31 +104,43 @@ internal sealed class GuideController : IDisposable
 
     public void SelectUltimate(int selectedEncounterId)
     {
+        var reload = false;
         lock (this.gate)
         {
             if (this.encounterId == selectedEncounterId)
                 return;
 
             this.encounterId = selectedEncounterId;
-            this.rankings = [];
-            this.report = null;
-            this.fightId = null;
-            this.actorId = null;
-            this.playback = null;
-            this.pending = null;
-            this.lastInput = null;
-            this.guideTitle = string.Empty;
-            this.error = string.Empty;
-            this.status = string.Empty;
-            this.announceGuide = false;
-            this.busy = false;
-            this.requests.Cancel();
-            this.requests = new CancellationTokenSource();
-            this.generation++;
+            this.ClearLoadedLocked();
+            reload = this.jobSpec is not null;
         }
 
         this.configuration.LastEncounterId = selectedEncounterId;
         this.configuration.Save();
+        if (reload)
+            this.SearchRankings();
+    }
+
+    public void SelectJob(string specOrName)
+    {
+        var job = JobCatalog.Find(specOrName);
+        if (job is null)
+            return;
+
+        lock (this.gate)
+        {
+            if (this.jobSpec == job.SpecName && this.rankings.Count > 0)
+                return;
+
+            var changed = this.jobSpec != job.SpecName;
+            this.jobSpec = job.SpecName;
+            if (changed)
+                this.ClearLoadedLocked();
+        }
+
+        this.configuration.LastJobSpec = job.SpecName;
+        this.configuration.Save();
+        this.SearchRankings();
     }
 
     public void PreferFight(int selectedFightId)
@@ -163,12 +188,43 @@ internal sealed class GuideController : IDisposable
 
     public void SearchRankings()
     {
-        var call = this.Begin();
         int encounter;
+        string? spec;
         lock (this.gate)
+        {
             encounter = this.encounterId;
+            spec = this.jobSpec;
+        }
 
-        _ = this.SearchAsync(encounter, call);
+        if (string.IsNullOrWhiteSpace(spec))
+        {
+            lock (this.gate)
+            {
+                this.error = "Choose a job.";
+                this.status = string.Empty;
+                this.busy = false;
+            }
+
+            return;
+        }
+
+        var call = this.Begin();
+        _ = this.SearchAsync(encounter, spec, call);
+    }
+
+    public void OpenRank(RankedReport row)
+    {
+        string? spec;
+        lock (this.gate)
+        {
+            this.preferredFightId = row.FightId;
+            this.rankedPlayer = row.Player;
+            this.rankedCode = row.Code;
+            spec = this.jobSpec;
+        }
+
+        var call = this.Begin();
+        _ = this.OpenRankAsync(row, spec, call);
     }
 
     public void LoadReport(string reportText)
@@ -239,7 +295,10 @@ internal sealed class GuideController : IDisposable
 
         lock (this.gate)
         {
-            var title = $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {input.PlayerName}";
+            var job = JobCatalog.Find(this.jobSpec)?.EnglishName;
+            var title = string.IsNullOrWhiteSpace(job)
+                ? $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {input.PlayerName}"
+                : $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {job} · {input.PlayerName}";
             this.playback = new GuidePlayback(steps);
             this.mismatch = false;
             this.guideTitle = title;
@@ -315,14 +374,15 @@ internal sealed class GuideController : IDisposable
         }
     }
 
-    private async Task SearchAsync(int encounter, (int Generation, CancellationToken Token) call)
+    private async Task SearchAsync(int encounter, string spec, (int Generation, CancellationToken Token) call)
     {
         try
         {
-            var rows = await this.client.GetSpeedRankingsAsync(
+            var rows = await this.client.GetJobSpeedRankingsAsync(
                 this.configuration.ClientId,
                 this.configuration.ClientSecret,
                 encounter,
+                spec,
                 call.Token).ConfigureAwait(false);
 
             lock (this.gate)
@@ -332,9 +392,10 @@ internal sealed class GuideController : IDisposable
 
                 this.rankings = rows;
                 this.busy = false;
+                var job = JobCatalog.Find(spec)?.EnglishName ?? spec;
                 this.status = rows.Count == 0
-                    ? "No speed rankings on this page."
-                    : $"{rows.Count} speed rankings.";
+                    ? $"No speed rankings for {job}."
+                    : $"{rows.Count} {job} speed rankings.";
             }
         }
         catch (OperationCanceledException)
@@ -404,6 +465,112 @@ internal sealed class GuideController : IDisposable
         {
             this.Fail(call.Generation, this.Scrub(ex.Message));
         }
+    }
+
+    private async Task OpenRankAsync(RankedReport row, string? spec, (int Generation, CancellationToken Token) call)
+    {
+        try
+        {
+            var encounter = this.encounterId;
+            var loaded = await this.client.GetReportAsync(
+                this.configuration.ClientId,
+                this.configuration.ClientSecret,
+                row.Code,
+                encounter,
+                call.Token).ConfigureAwait(false);
+
+            var fight = loaded.Fights.FirstOrDefault(item => item.Id == row.FightId);
+            if (fight is null)
+                throw new FflogsException("That pull is not in this report.");
+
+            var actor = FindRankedPlayer(loaded, fight, row.Player, spec);
+            if (actor is null)
+                throw new FflogsException($"Could not find {row.Player} in this pull.");
+
+            var casts = await this.client.GetCastsAsync(
+                this.configuration.ClientId,
+                this.configuration.ClientSecret,
+                loaded,
+                fight,
+                actor.Id,
+                call.Token).ConfigureAwait(false);
+
+            var input = new TimelineInput(
+                UltimateCatalog.GetOrFirst(loaded.EncounterId).EnglishName,
+                actor.Name,
+                loaded.Code,
+                fight.Id,
+                fight.StartMs,
+                fight.EndMs,
+                loaded.Phases,
+                fight.Transitions,
+                casts);
+
+            lock (this.gate)
+            {
+                if (call.Generation != this.generation)
+                    return;
+
+                this.report = loaded;
+                this.fightId = fight.Id;
+                this.actorId = actor.Id;
+                this.lastInput = input;
+                this.pending = input;
+                this.announceGuide = true;
+                this.playback = null;
+                this.status = "Casts received. Building the guide…";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (HttpRequestException)
+        {
+            this.Fail(call.Generation, "Could not connect to FFLogs.");
+        }
+        catch (Exception ex)
+        {
+            this.Fail(call.Generation, this.Scrub(ex.Message));
+        }
+    }
+
+    private static ReportActorInfo? FindRankedPlayer(LoadedReport loaded, ReportFightInfo fight, string playerName, string? spec)
+    {
+        var players = loaded.PlayersIn(fight)
+            .Where(player => string.Equals(player.Name, playerName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var job = JobCatalog.Find(spec);
+        if (job is not null)
+        {
+            var byJob = players.Where(player => JobCatalog.Matches(job, player.Job)).ToList();
+            if (byJob.Count > 0)
+                players = byJob;
+        }
+
+        return players.FirstOrDefault();
+    }
+
+    private void ClearLoadedLocked()
+    {
+        this.rankings = [];
+        this.report = null;
+        this.fightId = null;
+        this.actorId = null;
+        this.preferredFightId = null;
+        this.rankedPlayer = null;
+        this.rankedCode = null;
+        this.playback = null;
+        this.pending = null;
+        this.lastInput = null;
+        this.guideTitle = string.Empty;
+        this.error = string.Empty;
+        this.status = string.Empty;
+        this.announceGuide = false;
+        this.mismatch = false;
+        this.busy = false;
+        this.requests.Cancel();
+        this.requests = new CancellationTokenSource();
+        this.generation++;
     }
 
     private async Task BuildAsync((int Generation, CancellationToken Token) call)

@@ -8,7 +8,7 @@ The guide keeps ability order and phase names. It drops exact timestamps, downti
 
 Create your own FFLogs API v2 client at <https://www.fflogs.com/api/clients/>. In game, run `/guide` and paste the client id and secret. They are saved in the local Dalamud config and are not part of this source tree. `/guia` is an alias of `/guide`.
 
-Then pick an ultimate, load a speed ranking or paste a report code, pick a pull and a player, and press Build guide.
+Then pick an ultimate and a job. The plugin loads that job's individual FFLogs speed rankings for the encounter. Pick a rank to see that player's ability timeline.
 
 ## Build and load
 

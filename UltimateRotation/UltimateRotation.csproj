@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Author>Proteu</Author>
     <Name>Ultimate Rotation Guide</Name>
     <Punchline>Shows one player's ability order from an FFLogs ultimate pull.</Punchline>
-    <Description>Reads a public FFLogs report and builds a guide of ability order. The guide advances when you use the expected action. It does not replay log timing and it does not press any button.</Description>
+    <Description>Loads one job's public FFLogs speed rankings for an ultimate and shows that player's ability order. The guide advances when you use the expected action. It does not press any button.</Description>
     <Tags>ultimate;rotation;fflogs</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>

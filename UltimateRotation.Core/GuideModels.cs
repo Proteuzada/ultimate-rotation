@@ -53,10 +53,10 @@ public sealed record GuideStep(
 
 public sealed record RankedReport(
     int Rank,
+    string Player,
     string Code,
     int FightId,
     double? DurationMs,
-    string? Team,
     string? Server);
 
 public sealed record ReportActorInfo(int Id, string Name, string Job, string? Server)

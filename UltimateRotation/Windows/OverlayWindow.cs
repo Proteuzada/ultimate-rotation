@@ -29,7 +29,7 @@ internal sealed class OverlayWindow : Window
         if (playback is null)
         {
             ImGui.Text("No guide loaded.");
-            ImGui.TextWrapped("Use /guide to pick an ultimate, a report, a pull, and a player.");
+            ImGui.TextWrapped("Use /guide to pick an ultimate, a job, and a ranked parse.");
             ImGui.TextDisabled(UiText.GuideOnly);
             return;
         }

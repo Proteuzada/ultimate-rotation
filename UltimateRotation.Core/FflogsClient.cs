@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.2");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.3");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -45,18 +45,29 @@ public sealed class FflogsClient : IDisposable
         this.tokenExpiry = DateTime.MinValue;
     }
 
-    public async Task<IReadOnlyList<RankedReport>> GetSpeedRankingsAsync(
+    public async Task<IReadOnlyList<RankedReport>> GetJobSpeedRankingsAsync(
         string clientId,
         string clientSecret,
         int encounterId,
+        string specName,
         CancellationToken cancellationToken)
     {
-        const string query = """
-            query SpeedRankings($encounterID: Int!, $page: Int!) {
+        if (string.IsNullOrWhiteSpace(specName))
+            throw new FflogsException("Choose a job.");
+
+        var query = $$"""
+            query JobSpeedRankings($encounterID: Int!, $specName: String!, $page: Int!) {
               worldData {
                 encounter(id: $encounterID) {
                   name
-                  fightRankings(metric: speed, difficulty: 100, size: 8, page: $page)
+                  characterRankings(
+                    metric: playerspeed
+                    difficulty: {{UltimateCatalog.Difficulty}}
+                    size: {{UltimateCatalog.PartySize}}
+                    specName: $specName
+                    page: $page
+                    includeOtherPlayers: false
+                  )
                 }
               }
             }
@@ -69,6 +80,7 @@ public sealed class FflogsClient : IDisposable
             new Dictionary<string, object?>
             {
                 ["encounterID"] = encounterId,
+                ["specName"] = specName,
                 ["page"] = 1,
             },
             cancellationToken).ConfigureAwait(false);
@@ -77,9 +89,9 @@ public sealed class FflogsClient : IDisposable
         if (encounter.ValueKind is JsonValueKind.Null)
             throw new FflogsException("FFLogs does not know this ultimate.");
 
-        var rankings = Unwrap(Require(encounter, "fightRankings"));
+        var rankings = Unwrap(Require(encounter, "characterRankings"));
         if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            throw new FflogsException("FFLogs did not return rankings for this ultimate.");
+            throw new FflogsException("FFLogs did not return rankings for this job.");
 
         if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
             throw new FflogsException("FFLogs did not return the rankings list.");
@@ -97,6 +109,12 @@ public sealed class FflogsClient : IDisposable
             if (!row.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Object)
                 continue;
 
+            var player = ReadString(row, "name")
+                ?? ReadString(row, "characterName")
+                ?? ReadString(Child(row, "character"), "name");
+            if (string.IsNullOrWhiteSpace(player))
+                continue;
+
             var code = ReadString(report, "code");
             if (!ReportCode.TryExtract(code, out var parsed, out _))
                 continue;
@@ -108,10 +126,10 @@ public sealed class FflogsClient : IDisposable
             var duration = ReadDouble(row, "duration") ?? ReadDouble(row, "amount");
             results.Add(new RankedReport(
                 rank,
+                player,
                 parsed,
                 ReadInt(report, "fightID", "fightId"),
                 duration,
-                ReadString(Child(row, "guild"), "name"),
                 JoinServer(Child(row, "server"))));
 
             if (results.Count >= UltimateCatalog.RankingLimit)
