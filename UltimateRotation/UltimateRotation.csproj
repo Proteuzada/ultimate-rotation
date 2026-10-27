@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Author>Proteu</Author>
     <Name>Ultimate Rotation Guide</Name>
     <Punchline>Shows one player's ability order from an FFLogs ultimate pull.</Punchline>

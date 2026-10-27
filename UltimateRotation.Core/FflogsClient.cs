@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.6");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -66,84 +66,153 @@ public sealed class FflogsClient : IDisposable
                     size: {{UltimateCatalog.PartySize}}
                     specName: $specName
                     page: $page
-                    includeOtherPlayers: false
-                  )
+                  ) {
+                    hasMorePages
+                    rankings {
+                      name
+                      rank
+                      rankPercent
+                      report { code fightID }
+                      server { name region }
+                    }
+                  }
                 }
               }
             }
             """;
 
-        var data = await this.QueryAsync(
-            clientId,
-            clientSecret,
-            query,
-            new Dictionary<string, object?>
-            {
-                ["encounterID"] = encounterId,
-                ["specName"] = specName,
-                ["page"] = 1,
-            },
-            cancellationToken).ConfigureAwait(false);
+        var groups = new Dictionary<int, List<RankedReport>>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var total = 0;
 
-        var encounter = Require(Require(data, "worldData"), "encounter");
-        if (encounter.ValueKind is JsonValueKind.Null)
-            throw new FflogsException("FFLogs does not know this ultimate.");
-
-        var rankings = Unwrap(Require(encounter, "characterRankings"));
-        if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            throw new FflogsException("FFLogs did not return rankings for this job.");
-
-        if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
-            throw new FflogsException("FFLogs did not return the rankings list.");
-
-        var results = new List<RankedReport>();
-        var index = 0;
-        foreach (var row in rows.EnumerateArray())
+        for (var page = 1; page <= UltimateCatalog.MaxRankingPages; page++)
         {
-            index++;
-            if (row.ValueKind != JsonValueKind.Object)
-                continue;
-            if (row.TryGetProperty("hidden", out var hidden)
-                && hidden.ValueKind is JsonValueKind.True)
-                continue;
-            if (!row.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Object)
-                continue;
+            var data = await this.QueryAsync(
+                clientId,
+                clientSecret,
+                query,
+                new Dictionary<string, object?>
+                {
+                    ["encounterID"] = encounterId,
+                    ["specName"] = specName,
+                    ["page"] = page,
+                },
+                cancellationToken).ConfigureAwait(false);
 
-            var player = ReadString(row, "name")
-                ?? ReadString(row, "characterName")
-                ?? ReadString(Child(row, "character"), "name");
-            if (string.IsNullOrWhiteSpace(player))
-                continue;
+            var encounter = Require(Require(data, "worldData"), "encounter");
+            if (encounter.ValueKind is JsonValueKind.Null)
+                throw new FflogsException("FFLogs does not know this ultimate.");
 
-            var code = ReadString(report, "code");
-            if (!ReportCode.TryExtract(code, out var parsed, out _))
-                continue;
+            var rankings = Unwrap(Require(encounter, "characterRankings"));
+            if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                throw new FflogsException("FFLogs did not return rankings for this job.");
 
-            var rank = ReadInt(row, "rank");
-            if (rank <= 0)
-                rank = index;
+            if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
+                throw new FflogsException("FFLogs did not return the rankings list.");
 
-            var parse = RankedReport.ParsePercent(ReadDouble(row, "rankPercent"));
-            if (parse < 0)
-                continue;
+            var lowest = int.MaxValue;
+            var rowCount = 0;
+            foreach (var row in rows.EnumerateArray())
+            {
+                rowCount++;
+                if (!TryReadRank(row, total + 1, out var ranked))
+                    continue;
 
-            results.Add(new RankedReport(
-                rank,
-                player,
-                parsed,
-                ReadInt(report, "fightID", "fightId"),
-                ReadDouble(row, "duration"),
-                JoinServer(Child(row, "server")),
-                parse));
+                lowest = Math.Min(lowest, ranked.Parse);
+                var key = $"{ranked.Code}:{ranked.FightId}:{ranked.Player}";
+                if (!seen.Add(key))
+                    continue;
+                if (!groups.TryGetValue(ranked.Parse, out var bucket))
+                {
+                    bucket = [];
+                    groups[ranked.Parse] = bucket;
+                }
 
-            if (results.Count >= UltimateCatalog.RankingLimit)
+                if (bucket.Count >= UltimateCatalog.RowsPerParse)
+                    continue;
+
+                bucket.Add(ranked);
+                total++;
+                if (total >= UltimateCatalog.RankingLimit)
+                    break;
+            }
+
+            if (total >= UltimateCatalog.RankingLimit || rowCount == 0 || !HasMorePages(rankings, rowCount))
+                break;
+            if (ParseGroupsFilled(groups, lowest == int.MaxValue ? 0 : lowest))
                 break;
         }
 
-        return results
+        return groups
+            .SelectMany(group => group.Value)
             .OrderByDescending(row => row.Parse)
             .ThenBy(row => row.Rank)
             .ToList();
+    }
+
+    private static bool TryReadRank(JsonElement row, int fallbackRank, out RankedReport ranked)
+    {
+        ranked = null!;
+        if (row.ValueKind != JsonValueKind.Object)
+            return false;
+        if (row.TryGetProperty("hidden", out var hidden) && hidden.ValueKind is JsonValueKind.True)
+            return false;
+        if (!row.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var player = ReadString(row, "name")
+            ?? ReadString(row, "characterName")
+            ?? ReadString(Child(row, "character"), "name");
+        if (string.IsNullOrWhiteSpace(player))
+            return false;
+
+        var code = ReadString(report, "code");
+        if (!ReportCode.TryExtract(code, out var parsed, out _))
+            return false;
+
+        var parse = RankedReport.ParsePercent(ReadDouble(row, "rankPercent"));
+        if (parse < 0)
+            return false;
+
+        var rank = ReadInt(row, "rank");
+        if (rank <= 0)
+            rank = fallbackRank;
+
+        ranked = new RankedReport(
+            rank,
+            player,
+            parsed,
+            ReadInt(report, "fightID", "fightId"),
+            ReadDouble(row, "duration"),
+            JoinServer(Child(row, "server")),
+            parse);
+        return true;
+    }
+
+    private static bool HasMorePages(JsonElement rankings, int rowCount)
+    {
+        if (rankings.TryGetProperty("hasMorePages", out var more)
+            && more.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            return more.ValueKind == JsonValueKind.True;
+
+        return rowCount >= 100;
+    }
+
+    private static bool ParseGroupsFilled(Dictionary<int, List<RankedReport>> groups, int lowestOnPage)
+    {
+        if (groups.Count == 0)
+            return false;
+
+        var best = groups.Keys.Max();
+        for (var parse = best; parse > best - UltimateCatalog.ParseGroupDepth && parse >= 0; parse--)
+        {
+            if (!groups.TryGetValue(parse, out var rows) || rows.Count == 0)
+                return false;
+            if (rows.Count < UltimateCatalog.RowsPerParse && lowestOnPage >= parse)
+                return false;
+        }
+
+        return true;
     }
 
     public async Task<LoadedReport> GetReportAsync(

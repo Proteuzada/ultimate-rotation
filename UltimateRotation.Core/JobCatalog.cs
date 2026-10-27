@@ -1,8 +1,9 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// FFLogs spec slugs for jobs that can enter an ultimate. The slug is the specName
-/// argument on characterRankings. EnglishName is what the picker shows.
+/// FFLogs spec slugs for jobs that can enter an ultimate. specName is the unspaced
+/// slug from game data (DarkKnight), not the spaced English name (Dark Knight).
+/// EnglishName is what the picker shows.
 /// </summary>
 public static class JobCatalog
 {

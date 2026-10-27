@@ -16,4 +16,14 @@ public class UltimateCatalogTests
         Assert.Equal((ushort)1363, UltimateCatalog.GetOrFirst(1085).TerritoryId);
         Assert.Equal(1085, UltimateCatalog.FindByTerritory(1363)!.EncounterId);
     }
+
+    [Fact]
+    public void SpecNamesAreUnspacedFflogsSlugs()
+    {
+        Assert.Equal("DarkKnight", JobCatalog.Find("Dark Knight")!.SpecName);
+        Assert.Equal("WhiteMage", JobCatalog.Find("White Mage")!.SpecName);
+        Assert.Equal("BlackMage", JobCatalog.Find("Black Mage")!.SpecName);
+        Assert.Equal("RedMage", JobCatalog.Find("Red Mage")!.SpecName);
+        Assert.All(JobCatalog.All, job => Assert.DoesNotContain(' ', job.SpecName));
+    }
 }
