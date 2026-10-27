@@ -49,7 +49,7 @@ internal static class LocalPlayerAction
         }
     }
 
-    private static bool TryResolveTarget(uint actionId, IPlayerCharacter player, out ulong targetId, out bool waitingForTarget)
+    private static bool TryResolveTarget(uint actionId, IGameObject player, out ulong targetId, out bool waitingForTarget)
     {
         targetId = player.GameObjectId;
         waitingForTarget = false;
