@@ -801,7 +801,11 @@ internal sealed class GuideController : IDisposable
             {
                 ActionAttempt.Used => true,
                 ActionAttempt.Impossible => true,
-                ActionAttempt.Blocked => this.playback.ShouldSkipUnusable(elapsed),
+                ActionAttempt.Blocked => potion
+                    ? this.playback.ShouldSkipUnusable(elapsed)
+                    : CooldownHold.ShouldSkip(
+                        this.playback.ShouldSkipUnusable(elapsed),
+                        LocalPlayerAction.RemainingLockMs(actionId)),
                 _ => false,
             };
 
