@@ -13,10 +13,19 @@ internal static class PullCountdown
         try
         {
             var agent = AgentCountDownSettingDialog.Instance();
-            if (agent == null || !agent->ShowingCountdown)
+            if (agent == null)
                 return false;
 
-            remainingSeconds = agent->TimeRemaining;
+            // Active is the countdown itself. ShowingCountdown can already be false
+            // while the 1 is still the number the player sees.
+            var remaining = agent->TimeRemaining;
+            if (remaining <= 0f || remaining > 30f)
+                return false;
+
+            if (!agent->Active && !agent->ShowingCountdown)
+                return false;
+
+            remainingSeconds = remaining;
             return true;
         }
         catch

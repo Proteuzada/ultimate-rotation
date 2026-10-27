@@ -9,6 +9,7 @@ public class CooldownHoldTests
     {
         Assert.False(CooldownHold.ShouldSkip(timelineSaysSkip: true, remainingMs: 400));
         Assert.False(CooldownHold.ShouldSkip(timelineSaysSkip: true, remainingMs: 2500));
+        Assert.True(CooldownHold.ShouldSkip(timelineSaysSkip: true, remainingMs: 2501));
     }
 
     [Fact]

@@ -1,44 +1,47 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// Starts the rotation once, when a countdown reaches 1 second.
-/// That is the end of the 1, while the countdown is still showing. Waiting until 0 is late.
-/// Hiding the countdown before it reaches 1 does not start it.
+/// Presses once at the end of the countdown's 1, while that number is still showing.
+/// The displayed digit is the ceiling of the remaining time, so "1" stays up while
+/// remaining is still above 0 and at most 1. Remaining of 0 is after the number is gone.
+/// Remaining of 1 is when "1" first appears. The press is the last slice of that "1".
 /// </summary>
 public sealed class CountdownGate
 {
-    private const float OneSecond = 1f;
+    /// <summary>Seconds of the "1" still left when the opener is pressed.</summary>
+    public const float EndOfTheOneSeconds = 0.2f;
 
-    private bool countedDownTowardOne;
+    private bool sawTheOneComing;
     private bool started;
 
-    public bool Observe(bool showing, float remainingSeconds)
+    public bool Observe(bool running, float remainingSeconds)
     {
-        if (!showing)
+        if (!running || remainingSeconds <= 0f)
         {
             if (!this.started)
-                this.countedDownTowardOne = false;
+                this.sawTheOneComing = false;
             return false;
         }
 
-        if (remainingSeconds > OneSecond)
+        if (remainingSeconds > EndOfTheOneSeconds)
         {
-            this.countedDownTowardOne = true;
+            if (remainingSeconds > 1f)
+                this.sawTheOneComing = true;
             this.started = false;
             return false;
         }
 
-        if (this.started || !this.countedDownTowardOne)
+        if (this.started || !this.sawTheOneComing)
             return false;
 
         this.started = true;
-        this.countedDownTowardOne = false;
+        this.sawTheOneComing = false;
         return true;
     }
 
     public void Reset()
     {
-        this.countedDownTowardOne = false;
+        this.sawTheOneComing = false;
         this.started = false;
     }
 }

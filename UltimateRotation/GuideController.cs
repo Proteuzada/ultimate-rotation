@@ -98,6 +98,7 @@ internal sealed class GuideController : IDisposable
     private uint queuedActionId;
     private bool useGemdraught;
     private readonly CountdownGate countdown = new();
+    private readonly PartPace pace = new();
     private bool dummyPractice;
     private readonly HashSet<uint> disabledActions;
     private readonly HashSet<uint> enabledMitigations;
@@ -526,6 +527,7 @@ internal sealed class GuideController : IDisposable
                 ? $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {input.PlayerName}"
                 : $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {job} · {input.PlayerName}";
             this.playback = new GuidePlayback(steps);
+            this.pace.Reset();
             this.stepQueued = false;
             this.queuedActionId = 0;
             this.mismatch = false;
@@ -675,8 +677,8 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// When start-on-countdown is on, the guide clock begins as the countdown reaches 1.
-    /// The current step is due then, before the countdown finishes.
+    /// When start-on-countdown is on, the guide clock begins at the end of the displayed 1,
+    /// while that number is still showing. It does not wait until the number disappears.
     /// </summary>
     public DutySync SyncCountdown(bool showing, float remainingSeconds, DateTime utcNow)
     {
@@ -705,7 +707,7 @@ internal sealed class GuideController : IDisposable
             this.pullStartedUtc = utcNow;
             this.mismatch = false;
             this.AlignToActivePull(utcNow);
-            this.dutyStatus = "Countdown is at 1. The current step is due now.";
+            this.dutyStatus = "Countdown is at the end of the 1. The current step is due now.";
             return DutySync.CountdownStarted;
         }
     }
@@ -744,6 +746,12 @@ internal sealed class GuideController : IDisposable
                 if (stillQueued)
                     return;
 
+                var releasedElapsed = this.pullStartedUtc is { } started
+                    ? (utcNow - started).TotalMilliseconds
+                    : 0;
+                if (this.playback?.Current is { } finished)
+                    this.pace.NoteLate(releasedElapsed, finished.OffsetMs);
+
                 this.stepQueued = false;
                 this.queuedActionId = 0;
                 this.playback?.Skip();
@@ -753,6 +761,7 @@ internal sealed class GuideController : IDisposable
 
         GuideStep? step = null;
         var elapsed = 0d;
+        var guideElapsed = 0d;
         var drink = false;
         string? spec = null;
         var queue = false;
@@ -762,6 +771,8 @@ internal sealed class GuideController : IDisposable
                 return;
 
             elapsed = (utcNow - this.pullStartedUtc!.Value).TotalMilliseconds;
+            this.EnterCurrentPart(elapsed);
+            guideElapsed = this.pace.GuideMs(elapsed);
             step = this.playback!.Current;
             if (step is null)
                 return;
@@ -777,7 +788,7 @@ internal sealed class GuideController : IDisposable
         var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
         var potion = Gemdraughts.IsStep(step.Name);
         var lockMs = !potion && queue ? LocalPlayerAction.RemainingLockMs(actionId) : 0;
-        if (!ButtonQueue.ShouldPress(elapsed, step.OffsetMs, lockMs, false, queue && !potion))
+        if (!ButtonQueue.ShouldPress(guideElapsed, step.OffsetMs, lockMs, false, queue && !potion))
             return;
 
         var attempt = potion
@@ -802,15 +813,18 @@ internal sealed class GuideController : IDisposable
                 ActionAttempt.Used => true,
                 ActionAttempt.Impossible => true,
                 ActionAttempt.Blocked => potion
-                    ? this.playback.ShouldSkipUnusable(elapsed)
+                    ? this.playback.ShouldSkipUnusable(guideElapsed)
                     : CooldownHold.ShouldSkip(
-                        this.playback.ShouldSkipUnusable(elapsed),
+                        this.playback.ShouldSkipUnusable(guideElapsed),
                         LocalPlayerAction.RemainingLockMs(actionId)),
                 _ => false,
             };
 
             if (!advance)
                 return;
+
+            if (attempt == ActionAttempt.Used)
+                this.pace.NoteLate(elapsed, current.OffsetMs);
 
             this.playback.Skip();
             this.mismatch = false;
@@ -885,6 +899,27 @@ internal sealed class GuideController : IDisposable
         this.pullStartedUtc = null;
         this.stepQueued = false;
         this.queuedActionId = 0;
+        this.pace.Reset();
+    }
+
+    /// <summary>
+    /// Moves to the first step of a part once the fight clock reaches that part.
+    /// A part that is still early stays ahead of the index. The first visit to a
+    /// part anchors its timing so a previous delay does not dump every skill in it.
+    /// </summary>
+    private void EnterCurrentPart(double elapsedMs)
+    {
+        if (this.playback is null)
+            return;
+
+        var enter = this.playback.PartIndexAt(elapsedMs);
+        while (this.playback.Index < enter && !this.playback.IsComplete)
+            this.playback.Skip();
+
+        if (this.playback.Current is not { } step)
+            return;
+
+        this.pace.ObserveStep(elapsedMs, step.Index, this.playback.CurrentStartsPart, step.OffsetMs);
     }
 
     private bool CountdownExpired(DateTime utcNow)
@@ -989,6 +1024,7 @@ internal sealed class GuideController : IDisposable
 
                 this.report = loaded;
                 this.playback = null;
+                this.pace.Reset();
                 this.pending = null;
                 this.lastInput = null;
                 this.guideTitle = string.Empty;
@@ -1077,6 +1113,7 @@ internal sealed class GuideController : IDisposable
                 this.pending = input;
                 this.announceGuide = true;
                 this.playback = null;
+                this.pace.Reset();
                 this.status = "Casts received. Building the guide…";
             }
         }
@@ -1119,6 +1156,7 @@ internal sealed class GuideController : IDisposable
         this.rankedPlayer = null;
         this.rankedCode = null;
         this.playback = null;
+        this.pace.Reset();
         this.pending = null;
         this.lastInput = null;
         this.guideTitle = string.Empty;

@@ -85,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
             this.setup.ShowPage(SettingsPage.Rotation);
 
         if (countdown == DutySync.CountdownStarted)
-            Chat.Print("Countdown is at 1. The current step is pressed now, and the rotation follows from here.");
+            Chat.Print("Countdown is at the end of the 1. The current step is pressed now, and the rotation follows from here.");
         else if (sync == DutySync.PullStarted)
         {
             Chat.Print(this.controller.Snapshot().AutoRotation

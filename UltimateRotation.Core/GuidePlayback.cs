@@ -23,6 +23,46 @@ public sealed class GuidePlayback
 
     public GuideStep? Current => this.IsComplete ? null : this.steps[this.Index];
 
+    /// <summary>The current step is the first step of its phase, including the opener.</summary>
+    public bool CurrentStartsPart
+    {
+        get
+        {
+            if (this.Current is null)
+                return false;
+
+            if (this.Index <= 0)
+                return true;
+
+            return this.steps[this.Index].PhaseId != this.steps[this.Index - 1].PhaseId;
+        }
+    }
+
+    /// <summary>
+    /// Stays on the current part until the next part's time. When that time has
+    /// arrived, returns the first step of the latest part the fight clock has reached.
+    /// Skills inside a part are not skipped just because their timestamps have passed.
+    /// </summary>
+    public int PartIndexAt(double elapsedMs)
+    {
+        var index = this.Index;
+        if (index >= this.steps.Count)
+            return index;
+
+        for (var i = index + 1; i < this.steps.Count; i++)
+        {
+            if (this.steps[i].PhaseId == this.steps[i - 1].PhaseId)
+                continue;
+
+            if (elapsedMs + 40 < this.steps[i].OffsetMs)
+                break;
+
+            index = i;
+        }
+
+        return index;
+    }
+
     public string PhaseName
         => this.Current?.PhaseName
            ?? (this.steps.Count == 0 ? string.Empty : this.steps[^1].PhaseName);
