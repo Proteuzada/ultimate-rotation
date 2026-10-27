@@ -643,8 +643,8 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// When start-on-countdown is on, the guide clock begins as the countdown's last
-    /// second ends, before combat. The current step is then due at that same moment.
+    /// When start-on-countdown is on, the guide clock begins as the countdown reaches 1.
+    /// The current step is due then, before the countdown finishes.
     /// </summary>
     public DutySync SyncCountdown(bool showing, float remainingSeconds, DateTime utcNow)
     {
@@ -673,7 +673,7 @@ internal sealed class GuideController : IDisposable
             this.pullStartedUtc = utcNow;
             this.mismatch = false;
             this.AlignToActivePull(utcNow);
-            this.dutyStatus = "Countdown finished. The current step is due now.";
+            this.dutyStatus = "Countdown is at 1. The current step is due now.";
             return DutySync.CountdownStarted;
         }
     }

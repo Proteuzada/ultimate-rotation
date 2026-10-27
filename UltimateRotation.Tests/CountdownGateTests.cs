@@ -5,41 +5,42 @@ namespace UltimateRotation.Tests;
 public class CountdownGateTests
 {
     [Fact]
-    public void StartsWhenTheLastSecondEnds()
+    public void StartsAtTheEndOfTheOneAndNotAfterTheCountdown()
     {
         var gate = new CountdownGate();
         Assert.False(gate.Observe(true, 2f));
-        Assert.False(gate.Observe(true, 0.8f));
-        Assert.True(gate.Observe(true, 0.04f));
+        Assert.False(gate.Observe(true, 1.05f));
+        Assert.True(gate.Observe(true, 1f));
+        Assert.False(gate.Observe(true, 0.2f));
         Assert.False(gate.Observe(true, 0f));
     }
 
     [Fact]
-    public void CancelDuringTheLastSecondDoesNotStart()
+    public void CancelBeforeTheOneDoesNotStart()
     {
         var gate = new CountdownGate();
-        Assert.False(gate.Observe(true, 0.7f));
+        Assert.False(gate.Observe(true, 1.4f));
         Assert.False(gate.Observe(false, 0f));
     }
 
     [Fact]
-    public void HiddenJustAfterZeroStillStartsOnce()
+    public void JoiningDuringTheLastSecondDoesNotStartLate()
     {
         var gate = new CountdownGate();
-        Assert.False(gate.Observe(true, 0.12f));
-        Assert.True(gate.Observe(false, 0f));
-        Assert.False(gate.Observe(false, 0f));
+        Assert.False(gate.Observe(true, 0.4f));
+        Assert.False(gate.Observe(true, 0f));
     }
 
     [Fact]
     public void LaterCountdownCanStartAgain()
     {
         var gate = new CountdownGate();
-        Assert.False(gate.Observe(true, 0.8f));
-        Assert.True(gate.Observe(true, 0.02f));
+        Assert.False(gate.Observe(true, 3f));
+        Assert.True(gate.Observe(true, 0.98f));
 
         Assert.False(gate.Observe(true, 5f));
-        Assert.False(gate.Observe(true, 0.4f));
-        Assert.True(gate.Observe(true, 0.01f));
+        Assert.False(gate.Observe(true, 1.2f));
+        Assert.True(gate.Observe(true, 0.9f));
+        Assert.False(gate.Observe(false, 0f));
     }
 }

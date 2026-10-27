@@ -14,7 +14,7 @@ internal static class UiText
     public const string AutoRotation = "Automatic rotation";
     public const string AutoRotationHint = "Off by default. In the selected ultimate, or in combat with a striking dummy, it presses the current step when the clock reaches it, then moves to the next step. A step that cannot be used is skipped. It does not move you or target other players.";
     public const string StartOnCountdown = "Start on countdown";
-    public const string StartOnCountdownHint = "Off by default. The current step is pressed as the countdown's last second ends, and the guide starts from that moment. Cancelling the countdown before it finishes does nothing.";
+    public const string StartOnCountdownHint = "Off by default. The current step is pressed when the countdown reaches 1, at the end of that second. It does not wait until the countdown finishes. Cancelling before the 1 does nothing.";
     public const string UseGemdraught = "Use Gemdraught";
     public const string UseGemdraughtHint = "Off by default. On a Gemdraught step, automatic rotation drinks the highest grade in your bags for this job: Strength, Dexterity, Intelligence, or Mind. Off skips that step.";
     public const string CommandHelp = "Opens this window. /guide rotation opens the Rotation page. /guide actions opens the Actions page.";

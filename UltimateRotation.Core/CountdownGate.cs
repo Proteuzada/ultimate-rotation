@@ -1,51 +1,44 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// Watches a pull countdown. The rotation starts once, when the last second reaches its end.
-/// Hiding the countdown while that second is still counting does not start it.
+/// Starts the rotation once, when a countdown reaches 1 second.
+/// That is the end of the 1, while the countdown is still showing. Waiting until 0 is late.
+/// Hiding the countdown before it reaches 1 does not start it.
 /// </summary>
 public sealed class CountdownGate
 {
-    private const float EndSeconds = 0.05f;
-    private const float MissedEndSeconds = 0.2f;
+    private const float OneSecond = 1f;
 
-    private bool inLastSecond;
-    private float lastRemaining;
+    private bool countedDownTowardOne;
     private bool started;
 
     public bool Observe(bool showing, float remainingSeconds)
     {
-        if (showing && remainingSeconds > EndSeconds)
+        if (!showing)
         {
-            this.inLastSecond = remainingSeconds <= 1f;
-            this.lastRemaining = remainingSeconds;
+            if (!this.started)
+                this.countedDownTowardOne = false;
+            return false;
+        }
+
+        if (remainingSeconds > OneSecond)
+        {
+            this.countedDownTowardOne = true;
             this.started = false;
             return false;
         }
 
-        if (this.started || !this.inLastSecond)
-        {
-            if (!showing)
-                this.inLastSecond = false;
+        if (this.started || !this.countedDownTowardOne)
             return false;
-        }
-
-        var reachedEnd = showing || this.lastRemaining <= MissedEndSeconds;
-        if (!reachedEnd)
-        {
-            this.inLastSecond = false;
-            return false;
-        }
 
         this.started = true;
-        this.inLastSecond = false;
+        this.countedDownTowardOne = false;
         return true;
     }
 
     public void Reset()
     {
-        this.inLastSecond = false;
-        this.lastRemaining = 0;
+        this.countedDownTowardOne = false;
         this.started = false;
     }
 }
