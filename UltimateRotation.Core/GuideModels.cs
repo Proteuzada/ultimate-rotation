@@ -58,7 +58,25 @@ public sealed record RankedReport(
     string Code,
     int FightId,
     double? DurationMs,
-    string? Server);
+    string? Server,
+    int Parse)
+{
+    /// <summary>
+    /// FFLogs shows a parse as the whole-number percentile. 100 stays 100. 99.4 is 99.
+    /// </summary>
+    public static int ParsePercent(double? rankPercent)
+    {
+        if (rankPercent is not { } value || double.IsNaN(value) || double.IsInfinity(value))
+            return -1;
+
+        var parse = (int)Math.Floor(value);
+        if (parse > 100)
+            return 100;
+        if (parse < 0)
+            return 0;
+        return parse;
+    }
+}
 
 public sealed record ReportActorInfo(int Id, string Name, string Job, string? Server)
 {

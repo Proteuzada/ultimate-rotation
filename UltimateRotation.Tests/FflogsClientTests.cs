@@ -21,20 +21,23 @@ public class FflogsClientTests
             Assert.Equal("token-1", request.Authorization?.Parameter);
             Assert.DoesNotContain(Secret, request.Body, StringComparison.Ordinal);
             Assert.Contains("characterRankings", request.Body, StringComparison.Ordinal);
-            Assert.Contains("metric: playerspeed", request.Body, StringComparison.Ordinal);
+            Assert.Contains("metric: rdps", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("playerspeed", request.Body, StringComparison.Ordinal);
             Assert.Contains("specName", request.Body, StringComparison.Ordinal);
             Assert.Contains("Reaper", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("fightRankings", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("/zone/rankings", request.Body, StringComparison.Ordinal);
             return Json(HttpStatusCode.OK, """
                 {"data":{"worldData":{"encounter":{"name":"Futures Rewritten","characterRankings":{"rankings":[
-                  {"rank":1,"name":"Example","duration":754000,"report":{"code":"abcdefghijklmnop","fightID":12},"server":{"name":"Leviathan","region":"NA"}}
+                  {"rank":40,"rankPercent":99.4,"name":"Example","report":{"code":"abcdefghijklmnop","fightID":12},"server":{"name":"Leviathan","region":"NA"}},
+                  {"rank":3,"rankPercent":100,"name":"Other","report":{"code":"bbcdefghijklmnop","fightID":4},"server":{"name":"Sargatanas","region":"NA"}},
+                  {"rank":80,"rankPercent":98,"name":"Third","report":{"code":"cbcdefghijklmnop","fightID":8},"server":{"name":"Exodus","region":"NA"}}
                 ]}}}}}
                 """);
         });
 
         using var client = new FflogsClient(handler);
-        var rankings = await client.GetJobSpeedRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None);
+        var rankings = await client.GetJobParseRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None);
 
         Assert.Equal(FflogsClient.TokenEndpoint, handler.Requests[0].Url);
         Assert.Equal("Basic", handler.Requests[0].Authorization?.Scheme);
@@ -42,13 +45,25 @@ public class FflogsClientTests
         Assert.DoesNotContain(Secret, handler.Requests[0].Url, StringComparison.Ordinal);
         Assert.Equal(FflogsClient.GraphqlEndpoint, handler.Requests[1].Url);
 
-        var row = Assert.Single(rankings);
-        Assert.Equal(1, row.Rank);
+        Assert.Equal([100, 99, 98], rankings.Select(row => row.Parse).ToArray());
+        Assert.Equal(["Other", "Example", "Third"], rankings.Select(row => row.Player).ToArray());
+
+        var row = rankings[1];
+        Assert.Equal(40, row.Rank);
+        Assert.Equal(99, row.Parse);
         Assert.Equal("abcdefghijklmnop", row.Code);
         Assert.Equal(12, row.FightId);
-        Assert.Equal(754000, row.DurationMs);
         Assert.Equal("Example", row.Player);
         Assert.Equal("Leviathan (NA)", row.Server);
+    }
+
+    [Fact]
+    public void ParsePercentFloorsToTheDisplayedNumber()
+    {
+        Assert.Equal(100, RankedReport.ParsePercent(100));
+        Assert.Equal(99, RankedReport.ParsePercent(99.4));
+        Assert.Equal(98, RankedReport.ParsePercent(98));
+        Assert.Equal(-1, RankedReport.ParsePercent(null));
     }
 
     [Fact]
@@ -124,7 +139,7 @@ public class FflogsClientTests
 
         using var client = new FflogsClient(handler);
         var error = await Assert.ThrowsAsync<FflogsException>(() =>
-            client.GetJobSpeedRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None));
+            client.GetJobParseRankingsAsync("client-id", Secret, 1079, "Reaper", CancellationToken.None));
 
         Assert.DoesNotContain(Secret, error.Message, StringComparison.Ordinal);
         Assert.Contains("authenticate", error.Message, StringComparison.OrdinalIgnoreCase);

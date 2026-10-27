@@ -552,7 +552,7 @@ internal sealed class GuideController : IDisposable
     {
         try
         {
-            var rows = await this.client.GetJobSpeedRankingsAsync(
+            var rows = await this.client.GetJobParseRankingsAsync(
                 this.configuration.ClientId,
                 this.configuration.ClientSecret,
                 encounter,
@@ -568,8 +568,8 @@ internal sealed class GuideController : IDisposable
                 this.busy = false;
                 var job = JobCatalog.Find(spec)?.EnglishName ?? spec;
                 this.status = rows.Count == 0
-                    ? $"No speed rankings for {job}."
-                    : $"{rows.Count} {job} speed rankings.";
+                    ? $"No parses for {job}."
+                    : $"{rows.Count} {job} parses, grouped by percentile.";
             }
         }
         catch (OperationCanceledException)

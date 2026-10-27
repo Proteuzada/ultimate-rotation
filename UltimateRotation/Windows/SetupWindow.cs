@@ -78,7 +78,7 @@ internal sealed class SetupWindow : Window
         }
 
         ImGui.BeginDisabled(view.Busy || job is null);
-        if (ImGui.Button("Load speed rankings"))
+        if (ImGui.Button("Load parses"))
         {
             this.PersistCredentials();
             this.controller.SearchRankings();
@@ -91,12 +91,19 @@ internal sealed class SetupWindow : Window
             if (rankings.Success)
             {
                 if (view.Rankings.Count == 0)
-                    ImGui.TextDisabled(job is null ? "Choose a job." : "No rankings loaded.");
+                    ImGui.TextDisabled(job is null ? "Choose a job." : "No parses loaded.");
 
+                var shownParse = int.MinValue;
                 foreach (var row in view.Rankings)
                 {
+                    if (row.Parse != shownParse)
+                    {
+                        shownParse = row.Parse;
+                        ImGui.TextDisabled($"Parse {row.Parse}");
+                    }
+
                     var server = string.IsNullOrWhiteSpace(row.Server) ? string.Empty : $" · {row.Server}";
-                    var label = $"{row.Rank}. {row.Player}{server} · {row.Code}##{row.Rank}:{row.Code}:{row.FightId}";
+                    var label = $"{row.Parse} · {row.Player}{server} · {row.Code}##{row.Parse}:{row.Code}:{row.FightId}";
                     var isSelected = view.SelectedCode == row.Code
                         && view.SelectedPlayer == row.Player
                         && view.PreferredFightId == row.FightId;

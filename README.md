@@ -10,7 +10,7 @@ Automatic rotation is off by default. Turn it on with the Automatic rotation che
 
 Create your own FFLogs API v2 client at <https://www.fflogs.com/api/clients/>. In game, run `/guide` and paste the client id and secret. They are saved in the local Dalamud config and are not part of this source tree. `/guia` is an alias of `/guide`.
 
-Then pick an ultimate and a job. The plugin loads that job's individual FFLogs speed rankings for the encounter. Pick a rank to see that player's ability timeline. Enter that ultimate and the guide starts when the pull starts. It resets if you leave the zone or wipe. Leave Automatic rotation unchecked unless you want the plugin to press those steps for you.
+Then pick an ultimate and a job. The plugin loads that job's public FFLogs rDPS parses for the encounter and groups them by percentile (100, then 99, then 98, and so on). Each row shows that parse number. Pick a row to see that player's ability timeline. Enter that ultimate and the guide starts when the pull starts. It resets if you leave the zone or wipe. Leave Automatic rotation unchecked unless you want the plugin to press those steps for you.
 
 ## Build and load
 

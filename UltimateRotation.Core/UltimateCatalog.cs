@@ -8,7 +8,7 @@ public static class UltimateCatalog
 {
     public const int Difficulty = 100;
     public const int PartySize = 8;
-    public const int RankingLimit = 25;
+    public const int RankingLimit = 100;
 
     public static IReadOnlyList<UltimateEncounter> All { get; } =
     [

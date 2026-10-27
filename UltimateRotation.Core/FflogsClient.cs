@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.5");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.6");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -45,7 +45,7 @@ public sealed class FflogsClient : IDisposable
         this.tokenExpiry = DateTime.MinValue;
     }
 
-    public async Task<IReadOnlyList<RankedReport>> GetJobSpeedRankingsAsync(
+    public async Task<IReadOnlyList<RankedReport>> GetJobParseRankingsAsync(
         string clientId,
         string clientSecret,
         int encounterId,
@@ -56,12 +56,12 @@ public sealed class FflogsClient : IDisposable
             throw new FflogsException("Choose a job.");
 
         var query = $$"""
-            query JobSpeedRankings($encounterID: Int!, $specName: String!, $page: Int!) {
+            query JobParseRankings($encounterID: Int!, $specName: String!, $page: Int!) {
               worldData {
                 encounter(id: $encounterID) {
                   name
                   characterRankings(
-                    metric: playerspeed
+                    metric: rdps
                     difficulty: {{UltimateCatalog.Difficulty}}
                     size: {{UltimateCatalog.PartySize}}
                     specName: $specName
@@ -123,20 +123,27 @@ public sealed class FflogsClient : IDisposable
             if (rank <= 0)
                 rank = index;
 
-            var duration = ReadDouble(row, "duration") ?? ReadDouble(row, "amount");
+            var parse = RankedReport.ParsePercent(ReadDouble(row, "rankPercent"));
+            if (parse < 0)
+                continue;
+
             results.Add(new RankedReport(
                 rank,
                 player,
                 parsed,
                 ReadInt(report, "fightID", "fightId"),
-                duration,
-                JoinServer(Child(row, "server"))));
+                ReadDouble(row, "duration"),
+                JoinServer(Child(row, "server")),
+                parse));
 
             if (results.Count >= UltimateCatalog.RankingLimit)
                 break;
         }
 
-        return results;
+        return results
+            .OrderByDescending(row => row.Parse)
+            .ThenBy(row => row.Rank)
+            .ToList();
     }
 
     public async Task<LoadedReport> GetReportAsync(
