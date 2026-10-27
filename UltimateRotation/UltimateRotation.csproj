@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <Author>Proteu</Author>
     <Name>Ultimate Rotation Guide</Name>
     <Punchline>Shows one player's ability order from an FFLogs ultimate pull.</Punchline>
-    <Description>Loads one job's public FFLogs rDPS parses for an ultimate, grouped by percentile, and shows that player's ability order. In the selected ultimate, the guide starts at the pull and follows the fight, and it resets if you leave or wipe. Automatic rotation is off until you enable it. It then presses each due step for you, including on a striking dummy, and skips a step that cannot be used. The settings window has Parses, Actions, and Rotation pages. Actions shows each ability as an icon. A bright icon may be used, and a dimmed icon is skipped. Mitigations and Gemdraught stay off until you enable them.</Description>
+    <Description>Loads one job's public FFLogs rDPS parses for an ultimate, grouped by percentile, and shows that player's ability order. In the selected ultimate, the guide starts at the pull and follows the fight, and it resets if you leave or wipe. Automatic rotation is off until you enable it. It then presses each due step for you, including on a striking dummy, and skips a step that cannot be used. The settings window has Parses, Actions, and Rotation pages. The guide stays on the Rotation page. Start on countdown presses the current step as the countdown's last second ends. Actions shows each ability as an icon. A bright icon may be used, and a dimmed icon is skipped. Mitigations and Gemdraught stay off until you enable them.</Description>
     <Tags>ultimate;rotation;fflogs</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>

@@ -19,6 +19,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool AutoRotation { get; set; }
 
+    public bool StartOnCountdown { get; set; }
+
     public bool UseGemdraught { get; set; }
 
     public List<uint> DisabledActionIds { get; set; } = [];

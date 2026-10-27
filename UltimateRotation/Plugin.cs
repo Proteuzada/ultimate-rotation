@@ -30,17 +30,14 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GuideController controller;
     private readonly ActionObserver observer;
     private readonly SetupWindow setup;
-    private readonly OverlayWindow overlay;
 
     public Plugin()
     {
         var configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         this.controller = new GuideController(configuration);
         this.setup = new SetupWindow(configuration, this.controller);
-        this.overlay = new OverlayWindow(this.controller, () => this.setup.OpenPage(SettingsPage.Actions));
         this.windowSystem = new WindowSystem("UltimateRotation");
         this.windowSystem.AddWindow(this.setup);
-        this.windowSystem.AddWindow(this.overlay);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
         {
@@ -80,12 +77,16 @@ public sealed class Plugin : IDalamudPlugin
             Condition[ConditionFlag.InCombat],
             StrikingDummy.IsCurrentTarget(),
             now);
+        var showingCountdown = PullCountdown.TryRead(out var remaining);
+        var countdown = this.controller.SyncCountdown(showingCountdown, remaining, now);
         this.controller.ExecuteDueStep(now);
 
-        if (loaded || sync is DutySync.PullStarted or DutySync.DummyStarted)
-            this.overlay.IsOpen = true;
+        if (loaded || sync is DutySync.PullStarted or DutySync.DummyStarted || countdown == DutySync.CountdownStarted)
+            this.setup.ShowPage(SettingsPage.Rotation);
 
-        if (sync == DutySync.PullStarted)
+        if (countdown == DutySync.CountdownStarted)
+            Chat.Print("Countdown finished. The current step is pressed now, and the rotation follows from here.");
+        else if (sync == DutySync.PullStarted)
         {
             Chat.Print(this.controller.Snapshot().AutoRotation
                 ? "Pull started. Automatic rotation will press each step when it is due."
@@ -102,10 +103,11 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args)
     {
         var argument = args.Trim();
-        if (argument.Equals("overlay", StringComparison.OrdinalIgnoreCase))
-            this.overlay.Toggle();
+        if (argument.Equals("overlay", StringComparison.OrdinalIgnoreCase)
+            || argument.Equals("rotation", StringComparison.OrdinalIgnoreCase))
+            this.setup.ShowPage(SettingsPage.Rotation);
         else if (argument.Equals("actions", StringComparison.OrdinalIgnoreCase))
-            this.setup.OpenPage(SettingsPage.Actions);
+            this.setup.ShowPage(SettingsPage.Actions);
         else
             this.setup.Toggle();
     }

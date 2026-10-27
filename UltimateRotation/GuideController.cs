@@ -40,6 +40,8 @@ internal sealed class GuideSnapshot
 
     public bool AutoRotation { get; init; }
 
+    public bool StartOnCountdown { get; init; }
+
     public bool UseGemdraught { get; init; }
 
     public IReadOnlyList<ActionChoice> Actions { get; init; } = [];
@@ -49,6 +51,7 @@ internal enum DutySync
 {
     None,
     PullStarted,
+    CountdownStarted,
     DummyStarted,
     Reset,
 }
@@ -82,10 +85,14 @@ internal sealed class GuideController : IDisposable
     private bool announceGuide;
     private bool inDutyZone;
     private bool pullActive;
+    private bool combatSeen;
+    private bool countdownPull;
     private DateTime? pullStartedUtc;
     private string dutyStatus = string.Empty;
     private bool autoRotation;
+    private bool startOnCountdown;
     private bool useGemdraught;
+    private readonly CountdownGate countdown = new();
     private bool dummyPractice;
     private readonly HashSet<uint> disabledActions;
     private readonly HashSet<uint> enabledMitigations;
@@ -99,6 +106,7 @@ internal sealed class GuideController : IDisposable
         this.jobSpec = JobCatalog.Find(configuration.LastJobSpec)?.SpecName;
         this.includeOffGcds = configuration.IncludeOffGcds;
         this.autoRotation = configuration.AutoRotation;
+        this.startOnCountdown = configuration.StartOnCountdown;
         this.useGemdraught = configuration.UseGemdraught;
         this.disabledActions = configuration.DisabledActionIds.ToHashSet();
         this.enabledMitigations = configuration.EnabledMitigationIds.ToHashSet();
@@ -129,6 +137,7 @@ internal sealed class GuideController : IDisposable
                 GuideTitle = this.guideTitle,
                 DutyStatus = this.dutyStatus,
                 AutoRotation = this.autoRotation,
+                StartOnCountdown = this.startOnCountdown,
                 UseGemdraught = this.useGemdraught,
                 Actions = ActionMenu.Build(
                     this.jobSpec,
@@ -239,6 +248,19 @@ internal sealed class GuideController : IDisposable
         }
 
         this.configuration.AutoRotation = enabled;
+        this.configuration.Save();
+    }
+
+    public void SetStartOnCountdown(bool enabled)
+    {
+        lock (this.gate)
+        {
+            this.startOnCountdown = enabled;
+            if (!enabled)
+                this.countdown.Reset();
+        }
+
+        this.configuration.StartOnCountdown = enabled;
         this.configuration.Save();
     }
 
@@ -504,7 +526,7 @@ internal sealed class GuideController : IDisposable
 
             if (!inSelectedZone)
             {
-                if (this.autoRotation && strikingDummy)
+                if ((this.autoRotation || this.startOnCountdown) && strikingDummy)
                     return this.SyncDummy(utcNow, inCombat);
 
                 if (!this.inDutyZone && !this.pullActive && !this.dummyPractice)
@@ -514,8 +536,7 @@ internal sealed class GuideController : IDisposable
                 var onDummy = this.dummyPractice;
                 this.inDutyZone = false;
                 this.dummyPractice = false;
-                this.pullActive = false;
-                this.pullStartedUtc = null;
+                this.ClearPull();
                 this.playback?.Reset();
                 this.mismatch = false;
                 this.dutyStatus = tell
@@ -527,8 +548,7 @@ internal sealed class GuideController : IDisposable
             if (this.dummyPractice)
             {
                 this.dummyPractice = false;
-                this.pullActive = false;
-                this.pullStartedUtc = null;
+                this.ClearPull();
                 this.playback?.Reset();
                 this.mismatch = false;
             }
@@ -541,9 +561,14 @@ internal sealed class GuideController : IDisposable
                     : $"In {selected.EnglishName}. Waiting for the pull.";
             }
 
+            if (this.CountdownExpired(utcNow))
+                return this.playback is null ? DutySync.None : DutySync.Reset;
+
             if (inCombat && !this.pullActive)
             {
                 this.pullActive = true;
+                this.combatSeen = true;
+                this.countdownPull = false;
                 this.pullStartedUtc = utcNow;
                 this.mismatch = false;
                 this.AlignToActivePull(utcNow);
@@ -555,17 +580,19 @@ internal sealed class GuideController : IDisposable
                 return this.playback is null ? DutySync.None : DutySync.PullStarted;
             }
 
-            if (!inCombat && this.pullActive)
+            if (inCombat && this.pullActive)
+                this.combatSeen = true;
+
+            if (!inCombat && this.pullActive && this.combatSeen)
             {
-                this.pullActive = false;
-                this.pullStartedUtc = null;
+                this.ClearPull();
                 this.mismatch = false;
                 this.playback?.Reset();
                 this.dutyStatus = "Wipe. Guide reset.";
                 return this.playback is null ? DutySync.None : DutySync.Reset;
             }
 
-            if (this.pullActive && !this.autoRotation)
+            if (this.pullActive && !this.autoRotation && !this.countdownPull)
                 this.AlignToActivePull(utcNow);
 
             return DutySync.None;
@@ -583,9 +610,14 @@ internal sealed class GuideController : IDisposable
                 : "Striking dummy. Waiting for combat.";
         }
 
+        if (this.CountdownExpired(utcNow))
+            return this.playback is null ? DutySync.None : DutySync.Reset;
+
         if (inCombat && !this.pullActive)
         {
             this.pullActive = true;
+            this.combatSeen = true;
+            this.countdownPull = false;
             this.pullStartedUtc = utcNow;
             this.mismatch = false;
             this.AlignToActivePull(utcNow);
@@ -595,10 +627,12 @@ internal sealed class GuideController : IDisposable
             return this.playback is null ? DutySync.None : DutySync.DummyStarted;
         }
 
-        if (!inCombat && this.pullActive)
+        if (inCombat && this.pullActive)
+            this.combatSeen = true;
+
+        if (!inCombat && this.pullActive && this.combatSeen)
         {
-            this.pullActive = false;
-            this.pullStartedUtc = null;
+            this.ClearPull();
             this.mismatch = false;
             this.playback?.Reset();
             this.dutyStatus = "Dummy practice reset.";
@@ -606,6 +640,42 @@ internal sealed class GuideController : IDisposable
         }
 
         return DutySync.None;
+    }
+
+    /// <summary>
+    /// When start-on-countdown is on, the guide clock begins as the countdown's last
+    /// second ends, before combat. The current step is then due at that same moment.
+    /// </summary>
+    public DutySync SyncCountdown(bool showing, float remainingSeconds, DateTime utcNow)
+    {
+        lock (this.gate)
+        {
+            if (!this.startOnCountdown)
+            {
+                this.countdown.Reset();
+                return DutySync.None;
+            }
+
+            var finished = this.countdown.Observe(showing, remainingSeconds);
+            if (!finished || this.playback is null || (!this.inDutyZone && !this.dummyPractice))
+                return DutySync.None;
+
+            if (this.pullActive)
+            {
+                if (this.pullStartedUtc is { } started && (utcNow - started).TotalSeconds < 2)
+                    this.countdownPull = true;
+                return DutySync.None;
+            }
+
+            this.pullActive = true;
+            this.combatSeen = false;
+            this.countdownPull = true;
+            this.pullStartedUtc = utcNow;
+            this.mismatch = false;
+            this.AlignToActivePull(utcNow);
+            this.dutyStatus = "Countdown finished. The current step is due now.";
+            return DutySync.CountdownStarted;
+        }
     }
 
     /// <summary>
@@ -622,7 +692,7 @@ internal sealed class GuideController : IDisposable
         string? spec = null;
         lock (this.gate)
         {
-            if (!this.autoRotation || !this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
+            if ((!this.autoRotation && !this.countdownPull) || !this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
                 return;
 
             elapsed = (utcNow - started).TotalMilliseconds;
@@ -716,6 +786,29 @@ internal sealed class GuideController : IDisposable
             this.playback?.Reset();
             this.mismatch = false;
         }
+    }
+
+    private void ClearPull()
+    {
+        this.pullActive = false;
+        this.combatSeen = false;
+        this.countdownPull = false;
+        this.pullStartedUtc = null;
+    }
+
+    private bool CountdownExpired(DateTime utcNow)
+    {
+        if (!this.pullActive || this.combatSeen || this.pullStartedUtc is not { } started)
+            return false;
+
+        if ((utcNow - started).TotalSeconds <= 8)
+            return false;
+
+        this.ClearPull();
+        this.mismatch = false;
+        this.playback?.Reset();
+        this.dutyStatus = "The countdown ended without a pull. Guide reset.";
+        return true;
     }
 
     private void AlignToActivePull(DateTime? utcNow = null)
