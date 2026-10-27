@@ -23,7 +23,7 @@ internal sealed class ActionObserver : IDisposable
             var address = (nint)ActionManager.MemberFunctionPointers.UseAction;
             if (address == 0)
             {
-                this.log.Warning("UseAction indisponível. O guia só avança com Pular.");
+                this.log.Warning("UseAction is unavailable. The guide only advances with Skip.");
                 return;
             }
 
@@ -32,7 +32,7 @@ internal sealed class ActionObserver : IDisposable
         }
         catch (Exception ex)
         {
-            this.log.Error(ex, "Não foi possível observar as habilidades. O pulo manual continua disponível.");
+            this.log.Error(ex, "Could not watch abilities. Manual skip still works.");
         }
     }
 

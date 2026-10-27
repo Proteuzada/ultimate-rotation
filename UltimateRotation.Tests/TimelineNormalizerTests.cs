@@ -75,14 +75,14 @@ public class TimelineNormalizerTests
             [],
             [],
             [
-                new CastEvent(80_000, "cast", 1, "Cedo demais"),
-                new CastEvent(90_000, "cast", 2, "Poção"),
-                new CastEvent(200_001, "cast", 3, "Depois"),
+                new CastEvent(80_000, "cast", 1, "Too early"),
+                new CastEvent(90_000, "cast", 2, "Potion"),
+                new CastEvent(200_001, "cast", 3, "After"),
             ]);
 
         var steps = TimelineNormalizer.Normalize(input, id => new AbilityVerdict(false, StepKind.Other));
 
-        Assert.Equal(["Poção"], steps.Select(step => step.Name).ToArray());
+        Assert.Equal(["Potion"], steps.Select(step => step.Name).ToArray());
     }
 
     private static TimelineInput Input(params CastEvent[] events)

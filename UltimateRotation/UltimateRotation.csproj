@@ -1,11 +1,11 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Author>Proteu</Author>
-    <Name>Guia de Rotação Ultimate</Name>
-    <Punchline>Mostra a sequência de um pull de ultimate do FFLogs.</Punchline>
-    <Description>Lê um relatório público do FFLogs e monta um guia com a ordem das habilidades. O guia avança quando você usa a habilidade esperada. Não reproduz o tempo do log e não aperta nenhum botão.</Description>
-    <Tags>ultimate;rotacao;fflogs</Tags>
+    <Name>Ultimate Rotation Guide</Name>
+    <Punchline>Shows one player's ability order from an FFLogs ultimate pull.</Punchline>
+    <Description>Reads a public FFLogs report and builds a guide of ability order. The guide advances when you use the expected action. It does not replay log timing and it does not press any button.</Description>
+    <Tags>ultimate;rotation;fflogs</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>UltimateRotation</RootNamespace>

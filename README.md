@@ -1,14 +1,14 @@
-# Guia de Rotação Ultimate
+# Ultimate Rotation Guide
 
-Dalamud plugin for Proteu. It reads one player's casts from a public FFLogs ultimate pull and shows that sequence in game. The in-game UI is Brazilian Portuguese.
+Dalamud plugin for Proteu. It reads one player's casts from a public FFLogs ultimate pull and shows that sequence in game. The in-game UI is English.
 
-The guide keeps ability order and phase names. It drops exact timestamps, downtime, Sprint, Peloton, and auto-attacks. It advances when you use the expected action, or when you press Pular. It never presses a button for you.
+The guide keeps ability order and phase names. It drops exact timestamps, downtime, Sprint, Peloton, and auto-attacks. It advances when you use the expected action, or when you press Skip. It never presses a button for you.
 
 ## Configure
 
-Create your own FFLogs API v2 client at <https://www.fflogs.com/api/clients/>. In game, run `/guia` and paste the client id and secret. They are saved in the local Dalamud config and are not part of this source tree.
+Create your own FFLogs API v2 client at <https://www.fflogs.com/api/clients/>. In game, run `/guide` and paste the client id and secret. They are saved in the local Dalamud config and are not part of this source tree. `/guia` is an alias of `/guide`.
 
-Then pick an ultimate, load a speed ranking or paste a report code, pick a pull and a player, and press Montar guia.
+Then pick an ultimate, load a speed ranking or paste a report code, pick a pull and a player, and press Build guide.
 
 ## Build and load
 
@@ -28,9 +28,9 @@ The dev-plugin folder is `UltimateRotation/bin/Release/`. It must contain `Ultim
 
 Dalamud → `/xlsettings` → Experimental → Dev Plugin Locations. Add the full path to `UltimateRotation.dll`.
 
-`/xlplugins` → Dev Tools → Installed Dev Plugins → enable **Guia de Rotação Ultimate**.
+`/xlplugins` → Dev Tools → Installed Dev Plugins → enable **Ultimate Rotation Guide**.
 
-`/guia` opens the picker. `/guia overlay` shows the guide.
+`/guide` opens the picker. `/guide overlay` shows the guide. `/guia` does the same.
 
 ## Install from Dalamud
 
@@ -40,6 +40,6 @@ Dalamud → `/xlsettings` → Experimental → Custom Plugin Repositories. Paste
 https://raw.githubusercontent.com/Proteuzada/ultimate-rotation/main/repo.json
 ```
 
-Then install **Guia de Rotação Ultimate** from the plugin installer.
+Then install **Ultimate Rotation Guide** from the plugin installer.
 
 That file is the custom repository manifest. Pushing a `v*` tag, or publishing a GitHub release, builds `UltimateRotation.dll`, uploads `UltimateRotation.zip`, and updates `repo.json` with that zip.

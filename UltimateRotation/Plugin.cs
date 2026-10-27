@@ -9,7 +9,8 @@ namespace UltimateRotation;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CommandName = "/guia";
+    private const string CommandName = "/guide";
+    private const string CommandAlias = "/guia";
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
@@ -39,6 +40,10 @@ public sealed class Plugin : IDalamudPlugin
         {
             HelpMessage = UiText.CommandHelp,
         });
+        CommandManager.AddHandler(CommandAlias, new CommandInfo(this.OnCommand)
+        {
+            HelpMessage = UiText.AliasHelp,
+        });
 
         PluginInterface.UiBuilder.Draw += this.windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += this.ToggleSetup;
@@ -54,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleSetup;
         PluginInterface.UiBuilder.OpenMainUi -= this.ToggleSetup;
         CommandManager.RemoveHandler(CommandName);
+        CommandManager.RemoveHandler(CommandAlias);
         this.windowSystem.RemoveAllWindows();
         this.observer.Dispose();
         this.controller.Dispose();
@@ -65,7 +71,7 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         this.overlay.IsOpen = true;
-        Chat.Print("Guia carregado. Ele avança com a sua habilidade e não aperta nenhum botão.");
+        Chat.Print("Guide loaded. It advances when you use the ability and does not press any button.");
     }
 
     private void OnCommand(string command, string args)

@@ -123,7 +123,7 @@ public class FflogsClientTests
             client.GetSpeedRankingsAsync("client-id", Secret, 1079, CancellationToken.None));
 
         Assert.DoesNotContain(Secret, error.Message, StringComparison.Ordinal);
-        Assert.Contains("autenticar", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("authenticate", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body)

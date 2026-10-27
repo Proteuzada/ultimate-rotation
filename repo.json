@@ -1,26 +1,26 @@
 [
   {
     "Author": "Proteu",
-    "Name": "Guia de Rotação Ultimate",
-    "Punchline": "Mostra a sequência de um pull de ultimate do FFLogs.",
-    "Description": "Lê um relatório público do FFLogs e monta um guia com a ordem das habilidades. O guia avança quando você usa a habilidade esperada. Não reproduz o tempo do log e não aperta nenhum botão.",
+    "Name": "Ultimate Rotation Guide",
+    "Punchline": "Shows one player's ability order from an FFLogs ultimate pull.",
+    "Description": "Reads a public FFLogs report and builds a guide of ability order. The guide advances when you use the expected action. It does not replay log timing and it does not press any button.",
     "InternalName": "UltimateRotation",
-    "AssemblyVersion": "0.1.0.0",
+    "AssemblyVersion": "0.2.0.0",
     "TestingAssemblyVersion": null,
     "RepoUrl": "https://github.com/Proteuzada/ultimate-rotation",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "Tags": [
       "ultimate",
-      "rotacao",
+      "rotation",
       "fflogs"
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.1.0/UltimateRotation.zip",
-    "DownloadLinkTesting": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.1.0/UltimateRotation.zip",
-    "DownloadLinkUpdate": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.1.0/UltimateRotation.zip",
+    "DownloadLinkInstall": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.2.0/UltimateRotation.zip",
+    "DownloadLinkTesting": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.2.0/UltimateRotation.zip",
+    "DownloadLinkUpdate": "https://github.com/Proteuzada/ultimate-rotation/releases/download/v0.2.0/UltimateRotation.zip",
     "DownloadCount": 0,
-    "LastUpdate": 1793119711
+    "LastUpdate": 1793119623
   }
 ]

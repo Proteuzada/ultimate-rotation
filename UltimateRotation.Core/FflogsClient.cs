@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.1");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.2");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -75,14 +75,14 @@ public sealed class FflogsClient : IDisposable
 
         var encounter = Require(Require(data, "worldData"), "encounter");
         if (encounter.ValueKind is JsonValueKind.Null)
-            throw new FflogsException("O FFLogs não conhece esse ultimate.");
+            throw new FflogsException("FFLogs does not know this ultimate.");
 
         var rankings = Unwrap(Require(encounter, "fightRankings"));
         if (rankings.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            throw new FflogsException("O FFLogs não devolveu rankings para esse ultimate.");
+            throw new FflogsException("FFLogs did not return rankings for this ultimate.");
 
         if (!rankings.TryGetProperty("rankings", out var rows) || rows.ValueKind != JsonValueKind.Array)
-            throw new FflogsException("O FFLogs não devolveu a lista de rankings.");
+            throw new FflogsException("FFLogs did not return the rankings list.");
 
         var results = new List<RankedReport>();
         var index = 0;
@@ -171,11 +171,11 @@ public sealed class FflogsClient : IDisposable
 
         var report = Require(Require(data, "reportData"), "report");
         if (report.ValueKind is JsonValueKind.Null)
-            throw new FflogsException("Relatório não encontrado.");
+            throw new FflogsException("Report not found.");
 
         var visibility = ReadString(report, "visibility");
         if (string.Equals(visibility, "private", StringComparison.OrdinalIgnoreCase))
-            throw new FflogsException("Relatório privado ou sem permissão. A API pública só lê relatórios públicos.");
+            throw new FflogsException("Private report or missing permission. The public API only reads public reports.");
 
         var master = Require(report, "masterData");
         var actors = new List<ReportActorInfo>();
@@ -367,7 +367,7 @@ public sealed class FflogsClient : IDisposable
         using var response = await this.http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new FflogsException($"O FFLogs recusou a consulta (HTTP {(int)response.StatusCode}).");
+            throw new FflogsException($"FFLogs rejected the query (HTTP {(int)response.StatusCode}).");
 
         using var document = JsonDocument.Parse(text);
         if (document.RootElement.TryGetProperty("errors", out var errors)
@@ -377,11 +377,11 @@ public sealed class FflogsClient : IDisposable
             var message = errors[0].TryGetProperty("message", out var errorMessage)
                 ? errorMessage.GetString()
                 : null;
-            throw new FflogsException(string.IsNullOrWhiteSpace(message) ? "O FFLogs recusou a consulta." : message);
+            throw new FflogsException(string.IsNullOrWhiteSpace(message) ? "FFLogs rejected the query." : message);
         }
 
         if (!document.RootElement.TryGetProperty("data", out var data))
-            throw new FflogsException("Resposta do FFLogs sem dados.");
+            throw new FflogsException("FFLogs response had no data.");
 
         return data.Clone();
     }
@@ -389,7 +389,7 @@ public sealed class FflogsClient : IDisposable
     private async Task<string> GetTokenAsync(string clientId, string clientSecret, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
-            throw new FflogsException("Informe o ID e o segredo do cliente da API v2 do FFLogs.");
+            throw new FflogsException("Enter the FFLogs API v2 client id and secret.");
 
         await this.tokenGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -411,12 +411,12 @@ public sealed class FflogsClient : IDisposable
             using var response = await this.http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-                throw new FflogsException("Não foi possível autenticar no FFLogs. Confira o ID e o segredo.");
+                throw new FflogsException("Could not authenticate with FFLogs. Check the client id and secret.");
 
             using var document = JsonDocument.Parse(text);
             var accessToken = ReadString(document.RootElement, "access_token");
             if (string.IsNullOrWhiteSpace(accessToken))
-                throw new FflogsException("Não foi possível autenticar no FFLogs. Confira o ID e o segredo.");
+                throw new FflogsException("Could not authenticate with FFLogs. Check the client id and secret.");
 
             var expiresIn = ReadDouble(document.RootElement, "expires_in") ?? 3600;
             this.token = accessToken;
@@ -498,7 +498,7 @@ public sealed class FflogsClient : IDisposable
     private static JsonElement Require(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var child))
-            throw new FflogsException($"Resposta do FFLogs sem o campo {name}.");
+            throw new FflogsException($"FFLogs response is missing the {name} field.");
 
         return child;
     }

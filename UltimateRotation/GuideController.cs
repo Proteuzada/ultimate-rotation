@@ -177,7 +177,7 @@ internal sealed class GuideController : IDisposable
         {
             lock (this.gate)
             {
-                this.error = "Código de relatório inválido.";
+                this.error = "Invalid report code.";
                 this.status = string.Empty;
             }
 
@@ -246,8 +246,8 @@ internal sealed class GuideController : IDisposable
             this.busy = false;
             this.error = string.Empty;
             this.status = steps.Count == 0
-                ? "O log não tinha habilidades depois do filtro."
-                : $"{steps.Count} passos. O guia avança quando você usa a habilidade.";
+                ? "The log had no abilities after filtering."
+                : $"{steps.Count} steps. The guide advances when you use the ability.";
         }
 
         return steps.Count > 0 && announce;
@@ -333,8 +333,8 @@ internal sealed class GuideController : IDisposable
                 this.rankings = rows;
                 this.busy = false;
                 this.status = rows.Count == 0
-                    ? "Nenhum ranking de velocidade nessa página."
-                    : $"{rows.Count} rankings de velocidade.";
+                    ? "No speed rankings on this page."
+                    : $"{rows.Count} speed rankings.";
             }
         }
         catch (OperationCanceledException)
@@ -342,7 +342,7 @@ internal sealed class GuideController : IDisposable
         }
         catch (HttpRequestException)
         {
-            this.Fail(call.Generation, "Não foi possível conectar ao FFLogs.");
+            this.Fail(call.Generation, "Could not connect to FFLogs.");
         }
         catch (Exception ex)
         {
@@ -389,7 +389,7 @@ internal sealed class GuideController : IDisposable
 
                 this.busy = false;
                 this.status = loaded.Fights.Count == 0
-                    ? "Nenhum pull desse ultimate neste relatório."
+                    ? "No pulls of this ultimate in this report."
                     : $"{loaded.Title} · {loaded.Fights.Count} pulls.";
             }
         }
@@ -398,7 +398,7 @@ internal sealed class GuideController : IDisposable
         }
         catch (HttpRequestException)
         {
-            this.Fail(call.Generation, "Não foi possível conectar ao FFLogs.");
+            this.Fail(call.Generation, "Could not connect to FFLogs.");
         }
         catch (Exception ex)
         {
@@ -423,7 +423,7 @@ internal sealed class GuideController : IDisposable
             var fight = loaded?.Fights.FirstOrDefault(item => item.Id == selectedFight);
             var actor = loaded?.Actors.FirstOrDefault(item => item.Id == selectedActor);
             if (loaded is null || fight is null || actor is null)
-                throw new FflogsException("Escolha um pull e um jogador.");
+                throw new FflogsException("Choose a pull and a player.");
 
             var casts = await this.client.GetCastsAsync(
                 this.configuration.ClientId,
@@ -452,7 +452,7 @@ internal sealed class GuideController : IDisposable
                 this.lastInput = input;
                 this.pending = input;
                 this.announceGuide = true;
-                this.status = "Casts recebidos. Montando o guia…";
+                this.status = "Casts received. Building the guide…";
             }
         }
         catch (OperationCanceledException)
@@ -460,7 +460,7 @@ internal sealed class GuideController : IDisposable
         }
         catch (HttpRequestException)
         {
-            this.Fail(call.Generation, "Não foi possível conectar ao FFLogs.");
+            this.Fail(call.Generation, "Could not connect to FFLogs.");
         }
         catch (Exception ex)
         {
@@ -472,7 +472,7 @@ internal sealed class GuideController : IDisposable
     {
         if (message.Contains("permission", StringComparison.OrdinalIgnoreCase)
             || message.Contains("do not have permission", StringComparison.OrdinalIgnoreCase))
-            message = "Relatório privado ou sem permissão. A API pública só lê relatórios públicos.";
+            message = "Private report or missing permission. The public API only reads public reports.";
 
         if (message.Length > 300)
             message = message[..300];

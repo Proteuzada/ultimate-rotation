@@ -59,7 +59,7 @@ public static class TimelineNormalizer
             steps.Add(new GuideStep(
                 i,
                 cast.AbilityId,
-                string.IsNullOrWhiteSpace(cast.Name) ? $"Ação {cast.AbilityId}" : cast.Name,
+                string.IsNullOrWhiteSpace(cast.Name) ? $"Action {cast.AbilityId}" : cast.Name,
                 cast.Kind,
                 phaseId,
                 phaseName));
@@ -155,7 +155,7 @@ public static class TimelineNormalizer
     private static string DisplayName(Dictionary<int, PhaseLabel> phases, int id)
     {
         if (!phases.TryGetValue(id, out var phase) || string.IsNullOrWhiteSpace(phase.Name))
-            return phase?.IsIntermission == true ? "Intervalo" : $"Fase {id}";
+            return phase?.IsIntermission == true ? "Intermission" : $"Phase {id}";
 
         return phase.Name;
     }

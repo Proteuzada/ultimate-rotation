@@ -28,8 +28,8 @@ internal sealed class OverlayWindow : Window
         var playback = view.Playback;
         if (playback is null)
         {
-            ImGui.Text("Nenhum guia carregado.");
-            ImGui.TextWrapped("Use /guia para escolher um ultimate, um relatório, um pull e um jogador.");
+            ImGui.Text("No guide loaded.");
+            ImGui.TextWrapped("Use /guide to pick an ultimate, a report, a pull, and a player.");
             ImGui.TextDisabled(UiText.GuideOnly);
             return;
         }
@@ -41,25 +41,25 @@ internal sealed class OverlayWindow : Window
         var phase = index < playback.Steps.Count
             ? playback.Steps[index].PhaseName
             : playback.PhaseName;
-        ImGui.Text($"Fase: {(string.IsNullOrEmpty(phase) ? "Pull" : phase)}");
+        ImGui.Text($"Phase: {(string.IsNullOrEmpty(phase) ? "Pull" : phase)}");
 
         if (playback.Steps.Count == 0)
         {
-            ImGui.Text("Nenhum passo depois do filtro.");
+            ImGui.Text("No steps left after filtering.");
             ImGui.TextDisabled(UiText.GuideOnly);
             return;
         }
 
         if (index >= playback.Steps.Count)
         {
-            ImGui.Text("Sequência concluída.");
+            ImGui.Text("Sequence complete.");
         }
         else
         {
-            ImGui.Text($"Passo {index + 1} de {playback.Steps.Count}");
+            ImGui.Text($"Step {index + 1} of {playback.Steps.Count}");
             DrawStep(playback.Steps[index], current: true);
             ImGui.Spacing();
-            ImGui.Text("Depois");
+            ImGui.Text("Next");
             var shownPhase = playback.Steps[index].PhaseName;
             var last = Math.Min(playback.Steps.Count, index + 6);
             for (var i = index + 1; i < last; i++)
@@ -75,15 +75,15 @@ internal sealed class OverlayWindow : Window
         }
 
         if (view.Mismatch)
-            ImGui.TextDisabled("A habilidade usada não é o passo atual.");
+            ImGui.TextDisabled("The ability you used is not the current step.");
 
-        if (ImGui.Button("Pular"))
+        if (ImGui.Button("Skip"))
             this.controller.Skip();
         ImGui.SameLine();
-        if (ImGui.Button("Voltar"))
+        if (ImGui.Button("Back"))
             this.controller.Back();
         ImGui.SameLine();
-        if (ImGui.Button("Reiniciar"))
+        if (ImGui.Button("Restart"))
             this.controller.Reset();
 
         ImGui.TextDisabled(UiText.GuideOnly);

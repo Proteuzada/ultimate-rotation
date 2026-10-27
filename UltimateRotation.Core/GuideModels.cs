@@ -65,7 +65,7 @@ public sealed record ReportActorInfo(int Id, string Name, string Job, string? Se
     {
         get
         {
-            var job = string.IsNullOrWhiteSpace(Job) ? "Job desconhecido" : Job;
+            var job = string.IsNullOrWhiteSpace(Job) ? "Unknown job" : Job;
             return string.IsNullOrWhiteSpace(Server) ? $"{Name} · {job}" : $"{Name} · {job} · {Server}";
         }
     }
@@ -86,7 +86,7 @@ public sealed record ReportFightInfo(
     {
         get
         {
-            var mark = Kill ? "Abate" : "Wipe";
+            var mark = Kill ? "Kill" : "Wipe";
             var percent = !Kill && FightPercentage is { } value
                 ? $" {Math.Clamp(value, 0, 100):0}%"
                 : string.Empty;

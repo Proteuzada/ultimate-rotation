@@ -1,7 +1,7 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// FFLogs encounter ids for ultimates. Futures Rewritten (1079) is the last one this list knows.
+/// FFLogs encounter ids for ultimates. Dancing Mad (1085) is the last one this list knows.
 /// </summary>
 public static class UltimateCatalog
 {
@@ -17,6 +17,7 @@ public static class UltimateCatalog
         new(1065, "DSR", "Dragonsong's Reprise"),
         new(1068, "TOP", "The Omega Protocol"),
         new(1079, "FRU", "Futures Rewritten"),
+        new(1085, "UMAD", "Dancing Mad (Ultimate)"),
     ];
 
     public static UltimateEncounter GetOrFirst(int encounterId)

@@ -37,12 +37,12 @@ internal sealed class SetupWindow : Window
     {
         var view = this.controller.Snapshot();
         ImGui.TextDisabled(UiText.CredentialsHint);
-        ImGui.Text("ID do cliente");
+        ImGui.Text("Client ID");
         ImGui.InputText("##client-id", ref this.clientId, 200);
-        ImGui.Text("Segredo do cliente");
+        ImGui.Text("Client secret");
         ImGui.InputText("##client-secret", ref this.clientSecret, 200, ImGuiInputTextFlags.Password);
 
-        if (ImGui.Button("Salvar credenciais"))
+        if (ImGui.Button("Save credentials"))
             this.PersistCredentials();
 
         ImGui.Separator();
@@ -60,7 +60,7 @@ internal sealed class SetupWindow : Window
         }
 
         ImGui.BeginDisabled(view.Busy);
-        if (ImGui.Button("Buscar rankings de velocidade"))
+        if (ImGui.Button("Load speed rankings"))
         {
             this.PersistCredentials();
             this.controller.SearchRankings();
@@ -73,14 +73,14 @@ internal sealed class SetupWindow : Window
             if (rankings.Success)
             {
                 if (view.Rankings.Count == 0)
-                    ImGui.TextDisabled("Nenhum ranking carregado.");
+                    ImGui.TextDisabled("No rankings loaded.");
 
                 foreach (var row in view.Rankings)
                 {
                     var duration = row.DurationMs is { } milliseconds
                         ? ReportFightInfo.FormatDuration(milliseconds)
                         : "?";
-                    var team = string.IsNullOrWhiteSpace(row.Team) ? "Sem time" : row.Team;
+                    var team = string.IsNullOrWhiteSpace(row.Team) ? "No team" : row.Team;
                     var server = string.IsNullOrWhiteSpace(row.Server) ? string.Empty : $" · {row.Server}";
                     var label = $"{row.Rank}. {team} · {duration} · {row.Code}{server}";
                     var isSelected = this.reportInput == row.Code && view.PreferredFightId == row.FightId;
@@ -93,10 +93,10 @@ internal sealed class SetupWindow : Window
             }
         }
 
-        ImGui.Text("Ou cole o código ou a URL do relatório");
+        ImGui.Text("Or paste a report code or URL");
         ImGui.InputText("##report", ref this.reportInput, 240);
         ImGui.BeginDisabled(view.Busy);
-        if (ImGui.Button("Carregar relatório"))
+        if (ImGui.Button("Load report"))
         {
             this.PersistCredentials();
             this.controller.LoadReport(this.reportInput);
@@ -109,11 +109,11 @@ internal sealed class SetupWindow : Window
         this.DrawPlayer(view);
 
         var includeOffGcds = view.IncludeOffGcds;
-        if (ImGui.Checkbox("Incluir oGCDs", ref includeOffGcds) && includeOffGcds != view.IncludeOffGcds)
+        if (ImGui.Checkbox("Include oGCDs", ref includeOffGcds) && includeOffGcds != view.IncludeOffGcds)
             this.controller.SetIncludeOffGcds(includeOffGcds);
 
         ImGui.BeginDisabled(view.Busy || view.FightId is null || view.ActorId is null);
-        if (ImGui.Button("Montar guia"))
+        if (ImGui.Button("Build guide"))
         {
             this.PersistCredentials();
             this.controller.BuildGuide();
@@ -126,7 +126,7 @@ internal sealed class SetupWindow : Window
         else if (!string.IsNullOrEmpty(view.Status))
             ImGui.TextWrapped(view.Status);
 
-        ImGui.TextDisabled("O guia avança quando você usa a habilidade, não pelo relógio.");
+        ImGui.TextDisabled("The guide advances when you use the ability, not on a timer.");
         ImGui.TextDisabled(UiText.GuideOnly);
     }
 
@@ -135,18 +135,18 @@ internal sealed class SetupWindow : Window
         ImGui.Text("Pull");
         if (view.Report is null)
         {
-            ImGui.TextDisabled("Carregue um relatório.");
+            ImGui.TextDisabled("Load a report.");
             return;
         }
 
         if (view.Report.Fights.Count == 0)
         {
-            ImGui.TextDisabled("Nenhum pull desse ultimate neste relatório.");
+            ImGui.TextDisabled("No pulls of this ultimate in this report.");
             return;
         }
 
         var current = view.Report.Fights.FirstOrDefault(fight => fight.Id == view.FightId);
-        if (ImGui.BeginCombo("##fight", current?.Label ?? "Escolha o pull"))
+        if (ImGui.BeginCombo("##fight", current?.Label ?? "Choose a pull"))
         {
             foreach (var fight in view.Report.Fights)
             {
@@ -160,10 +160,10 @@ internal sealed class SetupWindow : Window
 
     private void DrawPlayer(GuideSnapshot view)
     {
-        ImGui.Text("Jogador");
+        ImGui.Text("Player");
         if (view.Report is null || view.FightId is null)
         {
-            ImGui.TextDisabled("Escolha um pull.");
+            ImGui.TextDisabled("Choose a pull.");
             return;
         }
 
@@ -173,7 +173,7 @@ internal sealed class SetupWindow : Window
 
         var players = view.Report.PlayersIn(fight);
         var current = players.FirstOrDefault(player => player.Id == view.ActorId);
-        if (ImGui.BeginCombo("##player", current?.Label ?? "Escolha o jogador"))
+        if (ImGui.BeginCombo("##player", current?.Label ?? "Choose a player"))
         {
             foreach (var player in players)
             {
