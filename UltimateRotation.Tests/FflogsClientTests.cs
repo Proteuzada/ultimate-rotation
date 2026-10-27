@@ -22,9 +22,9 @@ public class FflogsClientTests
             Assert.DoesNotContain(Secret, request.Body, StringComparison.Ordinal);
             Assert.Contains("characterRankings", request.Body, StringComparison.Ordinal);
             Assert.Contains("metric: rdps", request.Body, StringComparison.Ordinal);
-            Assert.Contains("rankings", request.Body, StringComparison.Ordinal);
-            Assert.Contains("rankPercent", request.Body, StringComparison.Ordinal);
-            Assert.Contains("fightID", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("rankings {", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("rankPercent", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("fightID", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("includeOtherPlayers", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("playerspeed", request.Body, StringComparison.Ordinal);
             Assert.Contains("specName", request.Body, StringComparison.Ordinal);
@@ -70,8 +70,8 @@ public class FflogsClientTests
             """));
         handler.When(FflogsClient.GraphqlEndpoint, request =>
         {
-            Assert.Contains("rankings", request.Body, StringComparison.Ordinal);
-            Assert.Contains("fightID", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("rankings {", request.Body, StringComparison.Ordinal);
+            Assert.DoesNotContain("fightID", request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain("includeOtherPlayers", request.Body, StringComparison.Ordinal);
             if (request.Body.Contains("\"page\":1", StringComparison.Ordinal))
             {

@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7.1");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 
@@ -55,6 +55,9 @@ public sealed class FflogsClient : IDisposable
         if (string.IsNullOrWhiteSpace(specName))
             throw new FflogsException("Choose a job.");
 
+        // characterRankings is a JSON scalar. A selection set is rejected:
+        // Field "characterRankings" of type "JSON" must not have a sub selection.
+        // The payload still contains rankings, rankPercent, report, and server.
         var query = $$"""
             query JobParseRankings($encounterID: Int!, $specName: String!, $page: Int!) {
               worldData {
@@ -66,16 +69,7 @@ public sealed class FflogsClient : IDisposable
                     size: {{UltimateCatalog.PartySize}}
                     specName: $specName
                     page: $page
-                  ) {
-                    hasMorePages
-                    rankings {
-                      name
-                      rank
-                      rankPercent
-                      report { code fightID }
-                      server { name region }
-                    }
-                  }
+                  )
                 }
               }
             }
