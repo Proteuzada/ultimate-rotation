@@ -13,6 +13,8 @@ internal static class UiText
     public const string GuideOnly = "Automatic rotation is off until you enable it. It only presses your own abilities during the pull.";
     public const string AutoRotation = "Automatic rotation";
     public const string AutoRotationHint = "Off by default. In the selected ultimate, or in combat with a striking dummy, it presses the current step when the clock reaches it, then moves to the next step. A step that cannot be used is skipped. It does not move you or target other players.";
+    public const string QueueButtonPresses = "Queue button presses";
+    public const string QueueButtonPressesHint = "On by default. The plugin holds the next action, the same way a pressed button does. The game can store that press during the last half-second of the animation lock and use it as the lock ends. Off sends the action only when the timeline time is reached.";
     public const string StartOnCountdown = "Start on countdown";
     public const string StartOnCountdownHint = "Off by default. The current step is pressed when the countdown reaches 1, at the end of that second. It does not wait until the countdown finishes. Cancelling before the 1 does nothing.";
     public const string UseGemdraught = "Use Gemdraught";

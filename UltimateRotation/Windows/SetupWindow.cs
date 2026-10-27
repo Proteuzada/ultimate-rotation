@@ -241,6 +241,11 @@ internal sealed class SetupWindow : Window
             this.controller.SetAutoRotation(autoRotation);
         ImGui.TextDisabled(UiText.AutoRotationHint);
 
+        var queuePresses = view.QueueButtonPresses;
+        if (ImGui.Checkbox(UiText.QueueButtonPresses, ref queuePresses) && queuePresses != view.QueueButtonPresses)
+            this.controller.SetQueueButtonPresses(queuePresses);
+        ImGui.TextDisabled(UiText.QueueButtonPressesHint);
+
         var startOnCountdown = view.StartOnCountdown;
         if (ImGui.Checkbox(UiText.StartOnCountdown, ref startOnCountdown) && startOnCountdown != view.StartOnCountdown)
             this.controller.SetStartOnCountdown(startOnCountdown);

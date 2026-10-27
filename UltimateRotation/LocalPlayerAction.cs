@@ -7,6 +7,7 @@ namespace UltimateRotation;
 internal enum ActionAttempt
 {
     Used,
+    Queued,
     Blocked,
     Impossible,
 }
@@ -36,18 +37,79 @@ internal static class LocalPlayerAction
             if (!TryResolveTarget(adjusted, player, out var targetId, out var waitingForTarget))
                 return waitingForTarget ? ActionAttempt.Blocked : ActionAttempt.Impossible;
 
-            if (manager->GetActionStatus(ActionType.Action, adjusted, targetId) != 0)
+            if (manager->GetActionStatus(ActionType.Action, adjusted, targetId) != 0
+                && !CanQueue(manager, adjusted))
                 return ActionAttempt.Blocked;
 
-            return manager->UseAction(ActionType.Action, adjusted, targetId)
-                ? ActionAttempt.Used
-                : ActionAttempt.Blocked;
+            if (!manager->UseAction(ActionType.Action, adjusted, targetId))
+                return ActionAttempt.Blocked;
+
+            return IsQueued(manager, adjusted) ? ActionAttempt.Queued : ActionAttempt.Used;
         }
         catch
         {
             return ActionAttempt.Impossible;
         }
     }
+
+    public static unsafe double RemainingLockMs(uint actionId)
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            if (manager == null || actionId == 0)
+                return 0;
+
+            var adjusted = manager->GetAdjustedActionId(actionId);
+            if (adjusted == 0)
+                adjusted = actionId;
+
+            var animation = Math.Max(0, manager->AnimationLock);
+            var recast = manager->GetRecastTime(ActionType.Action, adjusted);
+            var elapsed = manager->GetRecastTimeElapsed(ActionType.Action, adjusted);
+            var cooldown = Math.Max(0, recast - elapsed);
+            return Math.Max(animation, cooldown) * 1000d;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    public static unsafe bool IsQueued(uint actionId)
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            if (manager == null)
+                return false;
+
+            var adjusted = actionId == 0 ? 0 : manager->GetAdjustedActionId(actionId);
+            if (adjusted == 0)
+                adjusted = actionId;
+            return IsQueued(manager, adjusted) || IsQueued(manager, actionId);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static unsafe bool CanQueue(ActionManager* manager, uint actionId)
+    {
+        if (manager->ActionQueued)
+            return false;
+
+        var animation = Math.Max(0, manager->AnimationLock);
+        var recast = manager->GetRecastTime(ActionType.Action, actionId);
+        var elapsed = manager->GetRecastTimeElapsed(ActionType.Action, actionId);
+        var cooldown = Math.Max(0, recast - elapsed);
+        var remaining = Math.Max(animation, cooldown);
+        return remaining > 0 && remaining <= ButtonQueue.WindowMs / 1000d;
+    }
+
+    private static unsafe bool IsQueued(ActionManager* manager, uint actionId)
+        => actionId != 0 && manager->ActionQueued && manager->QueuedActionId == actionId;
 
     private static bool TryResolveTarget(uint actionId, IGameObject player, out ulong targetId, out bool waitingForTarget)
     {

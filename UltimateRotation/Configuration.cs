@@ -5,7 +5,7 @@ namespace UltimateRotation;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 
     public string ClientId { get; set; } = string.Empty;
 
@@ -20,6 +20,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool AutoRotation { get; set; }
 
     public bool StartOnCountdown { get; set; }
+
+    public bool QueueButtonPresses { get; set; } = true;
 
     public bool UseGemdraught { get; set; }
 

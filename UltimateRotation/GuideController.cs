@@ -42,6 +42,8 @@ internal sealed class GuideSnapshot
 
     public bool StartOnCountdown { get; init; }
 
+    public bool QueueButtonPresses { get; init; } = true;
+
     public bool UseGemdraught { get; init; }
 
     public IReadOnlyList<ActionChoice> Actions { get; init; } = [];
@@ -91,6 +93,9 @@ internal sealed class GuideController : IDisposable
     private string dutyStatus = string.Empty;
     private bool autoRotation;
     private bool startOnCountdown;
+    private bool queueButtonPresses;
+    private bool stepQueued;
+    private uint queuedActionId;
     private bool useGemdraught;
     private readonly CountdownGate countdown = new();
     private bool dummyPractice;
@@ -105,8 +110,16 @@ internal sealed class GuideController : IDisposable
         this.encounterId = UltimateCatalog.GetOrFirst(configuration.LastEncounterId).EncounterId;
         this.jobSpec = JobCatalog.Find(configuration.LastJobSpec)?.SpecName;
         this.includeOffGcds = configuration.IncludeOffGcds;
+        if (configuration.Version < 2)
+        {
+            configuration.QueueButtonPresses = true;
+            configuration.Version = 2;
+            configuration.Save();
+        }
+
         this.autoRotation = configuration.AutoRotation;
         this.startOnCountdown = configuration.StartOnCountdown;
+        this.queueButtonPresses = configuration.QueueButtonPresses;
         this.useGemdraught = configuration.UseGemdraught;
         this.disabledActions = configuration.DisabledActionIds.ToHashSet();
         this.enabledMitigations = configuration.EnabledMitigationIds.ToHashSet();
@@ -138,6 +151,7 @@ internal sealed class GuideController : IDisposable
                 DutyStatus = this.dutyStatus,
                 AutoRotation = this.autoRotation,
                 StartOnCountdown = this.startOnCountdown,
+                QueueButtonPresses = this.queueButtonPresses,
                 UseGemdraught = this.useGemdraught,
                 Actions = ActionMenu.Build(
                     this.jobSpec,
@@ -261,6 +275,22 @@ internal sealed class GuideController : IDisposable
         }
 
         this.configuration.StartOnCountdown = enabled;
+        this.configuration.Save();
+    }
+
+    public void SetQueueButtonPresses(bool enabled)
+    {
+        lock (this.gate)
+        {
+            this.queueButtonPresses = enabled;
+            if (!enabled)
+            {
+                this.stepQueued = false;
+                this.queuedActionId = 0;
+            }
+        }
+
+        this.configuration.QueueButtonPresses = enabled;
         this.configuration.Save();
     }
 
@@ -496,6 +526,8 @@ internal sealed class GuideController : IDisposable
                 ? $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {input.PlayerName}"
                 : $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {job} · {input.PlayerName}";
             this.playback = new GuidePlayback(steps);
+            this.stepQueued = false;
+            this.queuedActionId = 0;
             this.mismatch = false;
             this.guideTitle = title;
             this.busy = false;
@@ -679,33 +711,75 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// When automatic rotation is on, a loaded timeline, and the pull clock is running,
-    /// press the current step once its time has arrived. Then advance. If the action
-    /// cannot be used, skip it instead of pressing. A Gemdraught step is drunk only
-    /// when that option is on. One step per frame.
+    /// Holds the current step the way a pressed button does. With queueing on, the press
+    /// can go out during the last half-second of the animation lock so the game fires it
+    /// as that lock ends. A queued press stays the current step until the game uses it.
+    /// One new press per frame. A Gemdraught is sent only when that option is on, and only
+    /// at its timeline time.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
+        var released = false;
+        var waitingId = 0u;
+        lock (this.gate)
+        {
+            if (!this.CanPress)
+                return;
+
+            if (this.stepQueued)
+            {
+                released = true;
+                waitingId = this.queuedActionId;
+            }
+        }
+
+        if (released)
+        {
+            var stillQueued = LocalPlayerAction.IsQueued(waitingId);
+            lock (this.gate)
+            {
+                if (!this.stepQueued)
+                    return;
+
+                if (stillQueued)
+                    return;
+
+                this.stepQueued = false;
+                this.queuedActionId = 0;
+                this.playback?.Skip();
+                this.mismatch = false;
+            }
+        }
+
         GuideStep? step = null;
         var elapsed = 0d;
         var drink = false;
         string? spec = null;
+        var queue = false;
         lock (this.gate)
         {
-            if ((!this.autoRotation && !this.countdownPull) || !this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
+            if (!this.CanPress || this.stepQueued)
                 return;
 
-            elapsed = (utcNow - started).TotalMilliseconds;
-            step = this.playback.Current;
-            if (step is null || !this.playback.IsDue(elapsed))
+            elapsed = (utcNow - this.pullStartedUtc!.Value).TotalMilliseconds;
+            step = this.playback!.Current;
+            if (step is null)
                 return;
 
             drink = this.useGemdraught;
             spec = this.jobSpec;
+            queue = this.queueButtonPresses;
         }
+
+        if (step is null)
+            return;
 
         var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
         var potion = Gemdraughts.IsStep(step.Name);
+        var lockMs = !potion && queue ? LocalPlayerAction.RemainingLockMs(actionId) : 0;
+        if (!ButtonQueue.ShouldPress(elapsed, step.OffsetMs, lockMs, false, queue && !potion))
+            return;
+
         var attempt = potion
             ? drink ? GemdraughtUse.Use(Gemdraughts.StatFor(step.Name, spec)) : ActionAttempt.Impossible
             : LocalPlayerAction.Consider(actionId);
@@ -714,6 +788,14 @@ internal sealed class GuideController : IDisposable
         {
             if (this.playback?.Current is not { } current || current.Index != step.Index)
                 return;
+
+            if (attempt == ActionAttempt.Queued)
+            {
+                this.stepQueued = true;
+                this.queuedActionId = actionId;
+                this.mismatch = false;
+                return;
+            }
 
             var advance = attempt switch
             {
@@ -788,12 +870,17 @@ internal sealed class GuideController : IDisposable
         }
     }
 
+    private bool CanPress
+        => (this.autoRotation || this.countdownPull) && this.pullActive && this.playback is not null && this.pullStartedUtc is not null;
+
     private void ClearPull()
     {
         this.pullActive = false;
         this.combatSeen = false;
         this.countdownPull = false;
         this.pullStartedUtc = null;
+        this.stepQueued = false;
+        this.queuedActionId = 0;
     }
 
     private bool CountdownExpired(DateTime utcNow)
