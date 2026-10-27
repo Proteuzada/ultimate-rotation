@@ -34,7 +34,7 @@ public sealed class FflogsClient : IDisposable
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         this.http.Timeout = TimeSpan.FromSeconds(30);
-        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.7.2");
+        this.http.DefaultRequestHeaders.UserAgent.ParseAdd("ProteuUltimateRotation/0.8");
         this.http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
     }
 

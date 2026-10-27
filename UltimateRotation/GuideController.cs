@@ -39,6 +39,8 @@ internal sealed class GuideSnapshot
     public string DutyStatus { get; init; } = string.Empty;
 
     public bool AutoRotation { get; init; }
+
+    public bool UseGemdraught { get; init; }
 }
 
 internal enum DutySync
@@ -80,6 +82,8 @@ internal sealed class GuideController : IDisposable
     private DateTime? pullStartedUtc;
     private string dutyStatus = string.Empty;
     private bool autoRotation;
+    private bool useGemdraught;
+    private bool dummyPractice;
 
     public GuideController(Configuration configuration)
     {
@@ -88,6 +92,7 @@ internal sealed class GuideController : IDisposable
         this.jobSpec = JobCatalog.Find(configuration.LastJobSpec)?.SpecName;
         this.includeOffGcds = configuration.IncludeOffGcds;
         this.autoRotation = configuration.AutoRotation;
+        this.useGemdraught = configuration.UseGemdraught;
     }
 
     public GuideSnapshot Snapshot()
@@ -115,6 +120,7 @@ internal sealed class GuideController : IDisposable
                 GuideTitle = this.guideTitle,
                 DutyStatus = this.dutyStatus,
                 AutoRotation = this.autoRotation,
+                UseGemdraught = this.useGemdraught,
             };
         }
     }
@@ -217,6 +223,15 @@ internal sealed class GuideController : IDisposable
         }
 
         this.configuration.AutoRotation = enabled;
+        this.configuration.Save();
+    }
+
+    public void SetUseGemdraught(bool enabled)
+    {
+        lock (this.gate)
+            this.useGemdraught = enabled;
+
+        this.configuration.UseGemdraught = enabled;
         this.configuration.Save();
     }
 
@@ -355,7 +370,7 @@ internal sealed class GuideController : IDisposable
     /// Leaving that territory or leaving combat resets the guide. Pressing a step is separate
     /// and only happens when automatic rotation is on.
     /// </summary>
-    public DutySync SyncDuty(uint territoryType, bool inCombat, DateTime utcNow)
+    public DutySync SyncDuty(uint territoryType, bool inCombat, bool strikingDummy, DateTime utcNow)
     {
         lock (this.gate)
         {
@@ -364,17 +379,33 @@ internal sealed class GuideController : IDisposable
 
             if (!inSelectedZone)
             {
-                if (!this.inDutyZone && !this.pullActive)
+                if (this.autoRotation && strikingDummy)
+                    return this.SyncDummy(utcNow, inCombat);
+
+                if (!this.inDutyZone && !this.pullActive && !this.dummyPractice)
                     return DutySync.None;
 
                 var tell = this.playback is not null && (this.pullActive || this.playback.Index != 0);
+                var onDummy = this.dummyPractice;
                 this.inDutyZone = false;
+                this.dummyPractice = false;
                 this.pullActive = false;
                 this.pullStartedUtc = null;
                 this.playback?.Reset();
                 this.mismatch = false;
-                this.dutyStatus = tell ? "Left the duty. Guide reset." : string.Empty;
+                this.dutyStatus = tell
+                    ? onDummy ? "Left the striking dummy. Guide reset." : "Left the duty. Guide reset."
+                    : string.Empty;
                 return tell ? DutySync.Reset : DutySync.None;
+            }
+
+            if (this.dummyPractice)
+            {
+                this.dummyPractice = false;
+                this.pullActive = false;
+                this.pullStartedUtc = null;
+                this.playback?.Reset();
+                this.mismatch = false;
             }
 
             if (!this.inDutyZone)
@@ -416,15 +447,54 @@ internal sealed class GuideController : IDisposable
         }
     }
 
+    private DutySync SyncDummy(DateTime utcNow, bool inCombat)
+    {
+        if (!this.dummyPractice)
+        {
+            this.dummyPractice = true;
+            this.inDutyZone = false;
+            this.dutyStatus = this.playback is null
+                ? "Striking dummy. Load a guide to practice."
+                : "Striking dummy. Waiting for combat.";
+        }
+
+        if (inCombat && !this.pullActive)
+        {
+            this.pullActive = true;
+            this.pullStartedUtc = utcNow;
+            this.mismatch = false;
+            this.AlignToActivePull(utcNow);
+            this.dutyStatus = this.playback is null
+                ? "Striking dummy. Load a guide to practice."
+                : "Practicing on a striking dummy.";
+            return this.playback is null ? DutySync.None : DutySync.DummyStarted;
+        }
+
+        if (!inCombat && this.pullActive)
+        {
+            this.pullActive = false;
+            this.pullStartedUtc = null;
+            this.mismatch = false;
+            this.playback?.Reset();
+            this.dutyStatus = "Dummy practice reset.";
+            return this.playback is null ? DutySync.None : DutySync.Reset;
+        }
+
+        return DutySync.None;
+    }
+
     /// <summary>
     /// When automatic rotation is on, a loaded timeline, and the pull clock is running,
     /// press the current step once its time has arrived. Then advance. If the action
-    /// cannot be used, skip it instead of pressing. One step per frame.
+    /// cannot be used, skip it instead of pressing. A Gemdraught step is drunk only
+    /// when that option is on. One step per frame.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
         GuideStep? step = null;
         var elapsed = 0d;
+        var drink = false;
+        string? spec = null;
         lock (this.gate)
         {
             if (!this.autoRotation || !this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
@@ -434,10 +504,16 @@ internal sealed class GuideController : IDisposable
             step = this.playback.Current;
             if (step is null || !this.playback.IsDue(elapsed))
                 return;
+
+            drink = this.useGemdraught;
+            spec = this.jobSpec;
         }
 
         var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
-        var attempt = LocalPlayerAction.Consider(actionId);
+        var potion = Gemdraughts.IsStep(step.Name);
+        var attempt = potion
+            ? drink ? GemdraughtUse.Use(Gemdraughts.StatFor(step.Name, spec)) : ActionAttempt.Impossible
+            : LocalPlayerAction.Consider(actionId);
 
         lock (this.gate)
         {

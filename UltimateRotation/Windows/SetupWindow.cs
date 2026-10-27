@@ -125,6 +125,11 @@ internal sealed class SetupWindow : Window
             this.controller.SetAutoRotation(autoRotation);
         ImGui.TextDisabled(UiText.AutoRotationHint);
 
+        var useGemdraught = view.UseGemdraught;
+        if (ImGui.Checkbox(UiText.UseGemdraught, ref useGemdraught) && useGemdraught != view.UseGemdraught)
+            this.controller.SetUseGemdraught(useGemdraught);
+        ImGui.TextDisabled(UiText.UseGemdraughtHint);
+
         if (!string.IsNullOrEmpty(view.Error))
             ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), view.Error);
         else if (!string.IsNullOrEmpty(view.Status))
@@ -133,7 +138,7 @@ internal sealed class SetupWindow : Window
         if (!string.IsNullOrEmpty(view.DutyStatus))
             ImGui.TextWrapped(view.DutyStatus);
 
-        ImGui.TextDisabled("In the selected ultimate, the guide follows the fight from pull start. Leaving the zone or a wipe resets it.");
+        ImGui.TextDisabled("In the selected ultimate, the guide follows the fight from pull start. Leaving the zone or a wipe resets it. With automatic rotation on, a striking dummy does the same.");
     }
 
     private void PersistCredentials()

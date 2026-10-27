@@ -19,5 +19,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool AutoRotation { get; set; }
 
+    public bool UseGemdraught { get; set; }
+
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }

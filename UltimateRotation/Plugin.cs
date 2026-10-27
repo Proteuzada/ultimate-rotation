@@ -77,10 +77,11 @@ public sealed class Plugin : IDalamudPlugin
         var sync = this.controller.SyncDuty(
             ClientState.TerritoryType,
             Condition[ConditionFlag.InCombat],
+            StrikingDummy.IsCurrentTarget(),
             now);
         this.controller.ExecuteDueStep(now);
 
-        if (loaded || sync == DutySync.PullStarted)
+        if (loaded || sync is DutySync.PullStarted or DutySync.DummyStarted)
             this.overlay.IsOpen = true;
 
         if (sync == DutySync.PullStarted)
@@ -89,6 +90,8 @@ public sealed class Plugin : IDalamudPlugin
                 ? "Pull started. Automatic rotation will press each step when it is due."
                 : "Pull started. The guide is following this fight. Automatic rotation is off.");
         }
+        else if (sync == DutySync.DummyStarted)
+            Chat.Print("Dummy practice started. Automatic rotation will press each step when it is due.");
         else if (loaded)
             Chat.Print("Guide loaded.");
         else if (sync == DutySync.Reset)

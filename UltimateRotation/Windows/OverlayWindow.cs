@@ -45,6 +45,11 @@ internal sealed class OverlayWindow : Window
             this.controller.SetAutoRotation(autoRotation);
         ImGui.TextDisabled(UiText.AutoRotationHint);
 
+        var useGemdraught = view.UseGemdraught;
+        if (ImGui.Checkbox(UiText.UseGemdraught, ref useGemdraught) && useGemdraught != view.UseGemdraught)
+            this.controller.SetUseGemdraught(useGemdraught);
+        ImGui.TextDisabled(UiText.UseGemdraughtHint);
+
         var index = view.Index;
         var phase = index < playback.Steps.Count
             ? playback.Steps[index].PhaseName
