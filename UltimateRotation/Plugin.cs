@@ -30,16 +30,19 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ActionObserver observer;
     private readonly SetupWindow setup;
     private readonly OverlayWindow overlay;
+    private readonly ActionsWindow actions;
 
     public Plugin()
     {
         var configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         this.controller = new GuideController(configuration);
-        this.setup = new SetupWindow(configuration, this.controller);
-        this.overlay = new OverlayWindow(this.controller);
+        this.actions = new ActionsWindow(this.controller);
+        this.setup = new SetupWindow(configuration, this.controller, this.actions);
+        this.overlay = new OverlayWindow(this.controller, this.actions);
         this.windowSystem = new WindowSystem("UltimateRotation");
         this.windowSystem.AddWindow(this.setup);
         this.windowSystem.AddWindow(this.overlay);
+        this.windowSystem.AddWindow(this.actions);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
         {
@@ -100,8 +103,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        if (args.Trim().Equals("overlay", StringComparison.OrdinalIgnoreCase))
+        var argument = args.Trim();
+        if (argument.Equals("overlay", StringComparison.OrdinalIgnoreCase))
             this.overlay.Toggle();
+        else if (argument.Equals("actions", StringComparison.OrdinalIgnoreCase))
+            this.actions.Toggle();
         else
             this.setup.Toggle();
     }

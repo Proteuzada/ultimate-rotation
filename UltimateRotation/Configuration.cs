@@ -21,5 +21,9 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool UseGemdraught { get; set; }
 
+    public List<uint> DisabledActionIds { get; set; } = [];
+
+    public List<uint> EnabledMitigationIds { get; set; } = [];
+
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }

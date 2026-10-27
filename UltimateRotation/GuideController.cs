@@ -41,6 +41,8 @@ internal sealed class GuideSnapshot
     public bool AutoRotation { get; init; }
 
     public bool UseGemdraught { get; init; }
+
+    public IReadOnlyList<ActionChoice> Actions { get; init; } = [];
 }
 
 internal enum DutySync
@@ -85,6 +87,10 @@ internal sealed class GuideController : IDisposable
     private bool autoRotation;
     private bool useGemdraught;
     private bool dummyPractice;
+    private readonly HashSet<uint> disabledActions;
+    private readonly HashSet<uint> enabledMitigations;
+    private List<LogAction> logActions = [];
+    private bool sawGemdraught;
 
     public GuideController(Configuration configuration)
     {
@@ -94,6 +100,8 @@ internal sealed class GuideController : IDisposable
         this.includeOffGcds = configuration.IncludeOffGcds;
         this.autoRotation = configuration.AutoRotation;
         this.useGemdraught = configuration.UseGemdraught;
+        this.disabledActions = configuration.DisabledActionIds.ToHashSet();
+        this.enabledMitigations = configuration.EnabledMitigationIds.ToHashSet();
     }
 
     public GuideSnapshot Snapshot()
@@ -122,6 +130,13 @@ internal sealed class GuideController : IDisposable
                 DutyStatus = this.dutyStatus,
                 AutoRotation = this.autoRotation,
                 UseGemdraught = this.useGemdraught,
+                Actions = ActionMenu.Build(
+                    this.jobSpec,
+                    this.logActions,
+                    this.sawGemdraught,
+                    this.useGemdraught,
+                    this.disabledActions,
+                    this.enabledMitigations),
             };
         }
     }
@@ -230,9 +245,99 @@ internal sealed class GuideController : IDisposable
     public void SetUseGemdraught(bool enabled)
     {
         lock (this.gate)
+        {
             this.useGemdraught = enabled;
+            if (this.lastInput is not null)
+                this.pending = this.lastInput;
+        }
 
         this.configuration.UseGemdraught = enabled;
+        this.configuration.Save();
+    }
+
+    public void SetActionEnabled(uint actionId, bool mitigation, bool potion, bool enabled)
+    {
+        if (potion)
+        {
+            this.SetUseGemdraught(enabled);
+            return;
+        }
+
+        lock (this.gate)
+        {
+            if (mitigation)
+            {
+                if (enabled)
+                    this.enabledMitigations.Add(actionId);
+                else
+                    this.enabledMitigations.Remove(actionId);
+                this.disabledActions.Remove(actionId);
+            }
+            else if (enabled)
+            {
+                this.disabledActions.Remove(actionId);
+            }
+            else
+            {
+                this.disabledActions.Add(actionId);
+            }
+
+            if (this.lastInput is not null)
+                this.pending = this.lastInput;
+        }
+
+        this.configuration.DisabledActionIds = this.disabledActions.ToList();
+        this.configuration.EnabledMitigationIds = this.enabledMitigations.ToList();
+        this.configuration.Save();
+    }
+
+    public void SetDamageActionsEnabled(bool enabled)
+    {
+        lock (this.gate)
+        {
+            foreach (var action in this.logActions)
+            {
+                if (MitigationCatalog.IsMitigation(action.ActionId, action.Name))
+                    continue;
+                if (enabled)
+                    this.disabledActions.Remove(action.ActionId);
+                else
+                    this.disabledActions.Add(action.ActionId);
+            }
+
+            if (this.lastInput is not null)
+                this.pending = this.lastInput;
+        }
+
+        this.configuration.DisabledActionIds = this.disabledActions.ToList();
+        this.configuration.Save();
+    }
+
+    public void SetMitigationsEnabled(bool enabled)
+    {
+        lock (this.gate)
+        {
+            foreach (var mitigation in MitigationCatalog.ForJob(this.jobSpec))
+            {
+                if (enabled)
+                    this.enabledMitigations.Add(mitigation.ActionId);
+                else
+                    this.enabledMitigations.Remove(mitigation.ActionId);
+            }
+
+            foreach (var action in this.logActions.Where(action => MitigationCatalog.IsMitigation(action.ActionId, action.Name)))
+            {
+                if (enabled)
+                    this.enabledMitigations.Add(action.ActionId);
+                else
+                    this.enabledMitigations.Remove(action.ActionId);
+            }
+
+            if (this.lastInput is not null)
+                this.pending = this.lastInput;
+        }
+
+        this.configuration.EnabledMitigationIds = this.enabledMitigations.ToList();
         this.configuration.Save();
     }
 
@@ -306,6 +411,9 @@ internal sealed class GuideController : IDisposable
         TimelineInput? input;
         var include = true;
         var announce = false;
+        var drink = false;
+        HashSet<uint> disabled = [];
+        HashSet<uint> enabledMitigations = [];
         lock (this.gate)
         {
             input = this.pending;
@@ -313,6 +421,9 @@ internal sealed class GuideController : IDisposable
             include = this.includeOffGcds;
             announce = this.announceGuide;
             this.announceGuide = false;
+            drink = this.useGemdraught;
+            disabled = this.disabledActions.ToHashSet();
+            enabledMitigations = this.enabledMitigations.ToHashSet();
         }
 
         if (input is null)
@@ -324,12 +435,25 @@ internal sealed class GuideController : IDisposable
             steps = TimelineNormalizer.Normalize(
                 input,
                 actionId => GameActions.Classify(actionId, Plugin.DataManager, include));
-            steps = steps
+            var named = steps
                 .Select(step => step with
                 {
                     Name = GameActions.ClientName(step.ActionId, Plugin.DataManager) ?? step.Name,
                     AdjustedActionId = GameActions.Adjusted(step.ActionId),
                 })
+                .ToList();
+            lock (this.gate)
+            {
+                this.sawGemdraught = named.Any(step => Gemdraughts.IsStep(step.Name));
+                this.logActions = named
+                    .Where(step => !Gemdraughts.IsStep(step.Name) && step.ActionId != 0)
+                    .GroupBy(step => step.ActionId)
+                    .Select(group => new LogAction(group.Key, group.First().Name, group.First().Kind))
+                    .ToList();
+            }
+
+            steps = named
+                .Where(step => ActionMenu.Allows(step.ActionId, step.Name, drink, disabled, enabledMitigations))
                 .ToList();
         }
         catch (Exception ex)

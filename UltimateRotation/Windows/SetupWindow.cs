@@ -9,14 +9,16 @@ internal sealed class SetupWindow : Window
 {
     private readonly Configuration configuration;
     private readonly GuideController controller;
+    private readonly ActionsWindow actions;
     private string clientId = string.Empty;
     private string clientSecret = string.Empty;
 
-    public SetupWindow(Configuration configuration, GuideController controller)
+    public SetupWindow(Configuration configuration, GuideController controller, ActionsWindow actions)
         : base(UiText.SetupTitle)
     {
         this.configuration = configuration;
         this.controller = controller;
+        this.actions = actions;
         this.SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(460, 520),
@@ -129,6 +131,11 @@ internal sealed class SetupWindow : Window
         if (ImGui.Checkbox(UiText.UseGemdraught, ref useGemdraught) && useGemdraught != view.UseGemdraught)
             this.controller.SetUseGemdraught(useGemdraught);
         ImGui.TextDisabled(UiText.UseGemdraughtHint);
+
+        if (ImGui.Button("Actions"))
+            this.actions.Toggle();
+        ImGui.SameLine();
+        ImGui.TextDisabled("Choose which actions may be used.");
 
         if (!string.IsNullOrEmpty(view.Error))
             ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), view.Error);
