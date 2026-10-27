@@ -47,6 +47,7 @@ internal enum DutySync
 {
     None,
     PullStarted,
+    DummyStarted,
     Reset,
 }
 
