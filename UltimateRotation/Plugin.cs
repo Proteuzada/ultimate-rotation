@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -19,6 +20,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
+    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
 
     private readonly WindowSystem windowSystem;
     private readonly GuideController controller;
@@ -67,11 +70,21 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFramework(IFramework framework)
     {
-        if (!this.controller.Pump())
-            return;
+        var loaded = this.controller.Pump();
+        var sync = this.controller.SyncDuty(
+            ClientState.TerritoryType,
+            Condition[ConditionFlag.InCombat],
+            DateTime.UtcNow);
 
-        this.overlay.IsOpen = true;
-        Chat.Print("Guide loaded. It advances when you use the ability and does not press any button.");
+        if (loaded || sync == DutySync.PullStarted)
+            this.overlay.IsOpen = true;
+
+        if (sync == DutySync.PullStarted)
+            Chat.Print("Pull started. The guide is following this fight and does not press any button.");
+        else if (loaded)
+            Chat.Print("Guide loaded. It advances when you use the ability and does not press any button.");
+        else if (sync == DutySync.Reset)
+            Chat.Print("Guide reset.");
     }
 
     private void OnCommand(string command, string args)

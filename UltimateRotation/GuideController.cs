@@ -35,6 +35,15 @@ internal sealed class GuideSnapshot
     public bool Mismatch { get; init; }
 
     public string GuideTitle { get; init; } = string.Empty;
+
+    public string DutyStatus { get; init; } = string.Empty;
+}
+
+internal enum DutySync
+{
+    None,
+    PullStarted,
+    Reset,
 }
 
 internal sealed class GuideController : IDisposable
@@ -64,6 +73,10 @@ internal sealed class GuideController : IDisposable
     private TimelineInput? lastInput;
     private TimelineInput? pending;
     private bool announceGuide;
+    private bool inDutyZone;
+    private bool pullActive;
+    private DateTime? pullStartedUtc;
+    private string dutyStatus = string.Empty;
 
     public GuideController(Configuration configuration)
     {
@@ -96,6 +109,7 @@ internal sealed class GuideController : IDisposable
                 Index = this.playback?.Index ?? 0,
                 Mismatch = this.mismatch,
                 GuideTitle = this.guideTitle,
+                DutyStatus = this.dutyStatus,
             };
         }
     }
@@ -306,10 +320,75 @@ internal sealed class GuideController : IDisposable
             this.error = string.Empty;
             this.status = steps.Count == 0
                 ? "The log had no abilities after filtering."
-                : $"{steps.Count} steps. The guide advances when you use the ability.";
+                : $"{steps.Count} steps. In the selected ultimate, the guide follows the pull.";
+            this.AlignToActivePull();
         }
 
         return steps.Count > 0 && announce;
+    }
+
+    /// <summary>
+    /// Follows the selected ultimate the way a duty check does: territory id from
+    /// ClientState.TerritoryType, and pull start from the rising edge of InCombat.
+    /// Leaving that territory or leaving combat resets the guide. This does not press anything.
+    /// </summary>
+    public DutySync SyncDuty(ushort territoryType, bool inCombat, DateTime utcNow)
+    {
+        lock (this.gate)
+        {
+            var selected = UltimateCatalog.GetOrFirst(this.encounterId);
+            var inSelectedZone = territoryType != 0 && territoryType == selected.TerritoryId;
+
+            if (!inSelectedZone)
+            {
+                if (!this.inDutyZone && !this.pullActive)
+                    return DutySync.None;
+
+                var tell = this.playback is not null && (this.pullActive || this.playback.Index != 0);
+                this.inDutyZone = false;
+                this.pullActive = false;
+                this.pullStartedUtc = null;
+                this.playback?.Reset();
+                this.mismatch = false;
+                this.dutyStatus = tell ? "Left the duty. Guide reset." : string.Empty;
+                return tell ? DutySync.Reset : DutySync.None;
+            }
+
+            if (!this.inDutyZone)
+            {
+                this.inDutyZone = true;
+                this.dutyStatus = inCombat
+                    ? $"In {selected.EnglishName}."
+                    : $"In {selected.EnglishName}. Waiting for the pull.";
+            }
+
+            if (inCombat && !this.pullActive)
+            {
+                this.pullActive = true;
+                this.pullStartedUtc = utcNow;
+                this.mismatch = false;
+                this.AlignToActivePull(utcNow);
+                this.dutyStatus = this.playback is null
+                    ? $"In {selected.EnglishName}. Load a guide to follow the pull."
+                    : "Following the pull.";
+                return this.playback is null ? DutySync.None : DutySync.PullStarted;
+            }
+
+            if (!inCombat && this.pullActive)
+            {
+                this.pullActive = false;
+                this.pullStartedUtc = null;
+                this.mismatch = false;
+                this.playback?.Reset();
+                this.dutyStatus = "Wipe. Guide reset.";
+                return this.playback is null ? DutySync.None : DutySync.Reset;
+            }
+
+            if (this.pullActive)
+                this.AlignToActivePull(utcNow);
+
+            return DutySync.None;
+        }
     }
 
     public void NotifyLocalAction(uint actionId, uint adjustedActionId)
@@ -322,6 +401,13 @@ internal sealed class GuideController : IDisposable
             if (this.playback is null || this.playback.IsComplete)
                 return;
 
+            if (this.pullActive)
+            {
+                var current = this.playback.Current;
+                this.mismatch = current is not null && !current.Matches(actionId, adjustedActionId);
+                return;
+            }
+
             this.mismatch = !this.playback.TryAdvance(actionId, adjustedActionId);
         }
     }
@@ -330,6 +416,9 @@ internal sealed class GuideController : IDisposable
     {
         lock (this.gate)
         {
+            if (this.pullActive)
+                return;
+
             this.playback?.Skip();
             this.mismatch = false;
         }
@@ -339,6 +428,9 @@ internal sealed class GuideController : IDisposable
     {
         lock (this.gate)
         {
+            if (this.pullActive)
+                return;
+
             this.playback?.Back();
             this.mismatch = false;
         }
@@ -348,9 +440,22 @@ internal sealed class GuideController : IDisposable
     {
         lock (this.gate)
         {
+            if (this.pullActive)
+                return;
+
             this.playback?.Reset();
             this.mismatch = false;
         }
+    }
+
+    private void AlignToActivePull(DateTime? utcNow = null)
+    {
+        if (!this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
+            return;
+
+        var now = utcNow ?? DateTime.UtcNow;
+        this.playback.AlignToPull((now - started).TotalMilliseconds);
+        this.dutyStatus = "Following the pull.";
     }
 
     public void Dispose()

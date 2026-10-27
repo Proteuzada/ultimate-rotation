@@ -62,7 +62,8 @@ public static class TimelineNormalizer
                 string.IsNullOrWhiteSpace(cast.Name) ? $"Action {cast.AbilityId}" : cast.Name,
                 cast.Kind,
                 phaseId,
-                phaseName));
+                phaseName,
+                cast.TimestampMs - input.FightStartMs));
         }
 
         return steps;

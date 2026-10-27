@@ -37,6 +37,9 @@ internal sealed class OverlayWindow : Window
         if (!string.IsNullOrEmpty(view.GuideTitle))
             ImGui.TextDisabled(view.GuideTitle);
 
+        if (!string.IsNullOrEmpty(view.DutyStatus))
+            ImGui.TextWrapped(view.DutyStatus);
+
         var index = view.Index;
         var phase = index < playback.Steps.Count
             ? playback.Steps[index].PhaseName

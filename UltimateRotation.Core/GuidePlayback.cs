@@ -1,8 +1,8 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// Steps advance only when <see cref="TryAdvance"/> matches an action or when the user skips.
-/// There is no timer.
+/// Outside a pull, steps advance when <see cref="TryAdvance"/> matches an action or the user skips.
+/// During a pull, <see cref="AlignToPull"/> follows milliseconds since the fight started.
 /// </summary>
 public sealed class GuidePlayback
 {
@@ -48,4 +48,38 @@ public sealed class GuidePlayback
     }
 
     public void Reset() => this.Index = 0;
+
+    /// <summary>
+    /// Puts the current step on the fight clock. <paramref name="elapsedMs"/> is milliseconds
+    /// since pull start. Steps from before the pull stay behind the index.
+    /// </summary>
+    public void AlignToPull(double elapsedMs)
+    {
+        if (this.steps.Count == 0)
+        {
+            this.Index = 0;
+            return;
+        }
+
+        var start = 0;
+        while (start < this.steps.Count && this.steps[start].OffsetMs < 0)
+            start++;
+
+        if (start >= this.steps.Count)
+        {
+            this.Index = this.steps.Count;
+            return;
+        }
+
+        var index = start;
+        for (var i = start; i < this.steps.Count; i++)
+        {
+            if (this.steps[i].OffsetMs <= elapsedMs)
+                index = i;
+            else
+                break;
+        }
+
+        this.Index = index;
+    }
 }

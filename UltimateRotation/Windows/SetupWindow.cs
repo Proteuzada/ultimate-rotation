@@ -118,7 +118,10 @@ internal sealed class SetupWindow : Window
         else if (!string.IsNullOrEmpty(view.Status))
             ImGui.TextWrapped(view.Status);
 
-        ImGui.TextDisabled("The guide advances when you use the ability, not on a timer.");
+        if (!string.IsNullOrEmpty(view.DutyStatus))
+            ImGui.TextWrapped(view.DutyStatus);
+
+        ImGui.TextDisabled("In the selected ultimate, the guide follows the fight from pull start. Leaving the zone or a wipe resets it.");
         ImGui.TextDisabled(UiText.GuideOnly);
     }
 

@@ -60,6 +60,8 @@ public class TimelineNormalizerTests
 
         Assert.Equal("Fatebreaker", steps[0].PhaseName);
         Assert.Equal("Usurper of Frost", steps[1].PhaseName);
+        Assert.Equal(10_000, steps[0].OffsetMs);
+        Assert.Equal(90_000, steps[1].OffsetMs);
     }
 
     [Fact]
@@ -83,6 +85,7 @@ public class TimelineNormalizerTests
         var steps = TimelineNormalizer.Normalize(input, id => new AbilityVerdict(false, StepKind.Other));
 
         Assert.Equal(["Potion"], steps.Select(step => step.Name).ToArray());
+        Assert.Equal(-10_000, steps[0].OffsetMs);
     }
 
     private static TimelineInput Input(params CastEvent[] events)

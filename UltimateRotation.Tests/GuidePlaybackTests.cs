@@ -30,8 +30,28 @@ public class GuidePlaybackTests
         Assert.Equal("A", playback.Current!.Name);
     }
 
-    private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0)
-        => new(index, actionId, name, StepKind.Gcd, 1, "Pull")
+    [Fact]
+    public void StartsAtPullAndFollowsElapsedFightTime()
+    {
+        var playback = new GuidePlayback(
+        [
+            Step(0, 1, "Potion", offset: -10_000),
+            Step(1, 2, "Broil", offset: 0),
+            Step(2, 3, "Assize", offset: 2_500),
+        ]);
+
+        playback.AlignToPull(0);
+        Assert.Equal("Broil", playback.Current!.Name);
+
+        playback.AlignToPull(2_499);
+        Assert.Equal("Broil", playback.Current!.Name);
+
+        playback.AlignToPull(2_500);
+        Assert.Equal("Assize", playback.Current!.Name);
+    }
+
+    private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0, double offset = 0)
+        => new(index, actionId, name, StepKind.Gcd, 1, "Pull", offset)
         {
             AdjustedActionId = adjusted,
         };

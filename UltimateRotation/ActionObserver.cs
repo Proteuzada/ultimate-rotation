@@ -23,7 +23,7 @@ internal sealed class ActionObserver : IDisposable
             var address = (nint)ActionManager.MemberFunctionPointers.UseAction;
             if (address == 0)
             {
-                this.log.Warning("UseAction is unavailable. The guide only advances with Skip.");
+                this.log.Warning("UseAction is unavailable. The guide still follows the pull in the duty, and Skip still works outside it.");
                 return;
             }
 

@@ -32,7 +32,8 @@ public sealed record GuideStep(
     string Name,
     StepKind Kind,
     int PhaseId,
-    string PhaseName)
+    string PhaseName,
+    double OffsetMs)
 {
     public uint AdjustedActionId { get; init; }
 
