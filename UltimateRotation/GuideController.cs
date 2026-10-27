@@ -332,7 +332,7 @@ internal sealed class GuideController : IDisposable
     /// ClientState.TerritoryType, and pull start from the rising edge of InCombat.
     /// Leaving that territory or leaving combat resets the guide. This does not press anything.
     /// </summary>
-    public DutySync SyncDuty(ushort territoryType, bool inCombat, DateTime utcNow)
+    public DutySync SyncDuty(uint territoryType, bool inCombat, DateTime utcNow)
     {
         lock (this.gate)
         {
