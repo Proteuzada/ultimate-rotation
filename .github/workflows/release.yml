@@ -114,7 +114,7 @@ jobs:
           else
             gh release create "$RELEASE_TAG" UltimateRotation.zip repo.json \
               --title "$RELEASE_TAG" \
-              --notes "Ultimate Rotation Guide ${RELEASE_TAG}. In the selected ultimate, the guide starts at the pull and follows the fight. It resets if you leave the zone or wipe. It does not press any button."
+              --notes "Ultimate Rotation Guide ${RELEASE_TAG}. In the selected ultimate, the guide starts at the pull and follows the fight. Automatic rotation is off until you enable it. It resets if you leave the zone or wipe."
           fi
 
       - name: Publish repo.json on main

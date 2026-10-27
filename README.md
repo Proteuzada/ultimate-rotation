@@ -2,13 +2,15 @@
 
 Dalamud plugin for Proteu. It reads one player's casts from a public FFLogs ultimate pull and shows that sequence in game. The in-game UI is English.
 
-The guide keeps ability order and phase names. It drops downtime, Sprint, Peloton, and auto-attacks. When you are in the selected ultimate, it starts at the pull and stays on the fight clock. Leaving that zone or a wipe resets it. Outside the duty, it still advances when you use the expected action, or when you press Skip. It never presses a button for you.
+The guide keeps ability order and phase names. It drops downtime, Sprint, Peloton, and auto-attacks. When you are in the selected ultimate, it starts at the pull and stays on the fight clock. Leaving that zone or a wipe resets it. Outside the duty, it still advances when you use the expected action, or when you press Skip.
+
+Automatic rotation is off by default. Turn it on with the Automatic rotation checkbox in `/guide` or on the overlay. During the pull it presses the current step for your character when the fight clock reaches that step, then moves on. If the action cannot be used, that step is skipped. It does not move you, target other players, or inject packets.
 
 ## Configure
 
 Create your own FFLogs API v2 client at <https://www.fflogs.com/api/clients/>. In game, run `/guide` and paste the client id and secret. They are saved in the local Dalamud config and are not part of this source tree. `/guia` is an alias of `/guide`.
 
-Then pick an ultimate and a job. The plugin loads that job's individual FFLogs speed rankings for the encounter. Pick a rank to see that player's ability timeline. Enter that ultimate and the guide starts when the pull starts. It resets if you leave the zone or wipe.
+Then pick an ultimate and a job. The plugin loads that job's individual FFLogs speed rankings for the encounter. Pick a rank to see that player's ability timeline. Enter that ultimate and the guide starts when the pull starts. It resets if you leave the zone or wipe. Leave Automatic rotation unchecked unless you want the plugin to press those steps for you.
 
 ## Build and load
 

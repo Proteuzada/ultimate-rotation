@@ -6,7 +6,9 @@ internal static class UiText
     public const string OverlayTitle = "Guide###UltimateRotationOverlay";
     public const string Working = "Asking FFLogs…";
     public const string CredentialsHint = "Create a client at fflogs.com/api/clients. The secret stays in your local Dalamud config.";
-    public const string GuideOnly = "Guide only. This plugin does not press any ability.";
+    public const string GuideOnly = "Automatic rotation is off until you enable it. It only presses your own abilities during the pull.";
+    public const string AutoRotation = "Automatic rotation";
+    public const string AutoRotationHint = "Off by default. In the selected ultimate, it presses the current step when the fight clock reaches it, then moves to the next step. A step that cannot be used is skipped. It does not move you or target other players.";
     public const string CommandHelp = "Opens the rotation guide. /guide overlay shows or hides the overlay.";
     public const string AliasHelp = "Alias of /guide. /guia overlay shows or hides the overlay.";
 

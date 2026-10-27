@@ -4,6 +4,14 @@ using LuminaAction = Lumina.Excel.Sheets.Action;
 
 namespace UltimateRotation;
 
+internal enum ActionTargetKind
+{
+    Self,
+    Hostile,
+    Ground,
+    OtherPlayer,
+}
+
 internal static class GameActions
 {
     public static AbilityVerdict Classify(uint actionId, IDataManager data, bool includeOffGcds)
@@ -22,6 +30,45 @@ internal static class GameActions
 
         var name = action.Name.ToString();
         return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    public static bool TryDescribeTarget(uint actionId, IDataManager data, out ActionTargetKind kind)
+    {
+        kind = ActionTargetKind.Self;
+        if (!TryGetAction(actionId, data, out var action))
+            return false;
+
+        if (action.TargetArea)
+        {
+            kind = ActionTargetKind.Ground;
+            return true;
+        }
+
+        if (action.CanTargetHostile && !action.CanTargetSelf)
+        {
+            kind = ActionTargetKind.Hostile;
+            return true;
+        }
+
+        if (action.CanTargetSelf)
+        {
+            kind = ActionTargetKind.Self;
+            return true;
+        }
+
+        if (action.CanTargetHostile)
+        {
+            kind = ActionTargetKind.Hostile;
+            return true;
+        }
+
+        if (action.CanTargetParty || action.CanTargetFriendly)
+        {
+            kind = ActionTargetKind.OtherPlayer;
+            return true;
+        }
+
+        return true;
     }
 
     public static unsafe uint Adjusted(uint actionId)

@@ -50,6 +50,24 @@ public class GuidePlaybackTests
         Assert.Equal("Assize", playback.Current!.Name);
     }
 
+    [Fact]
+    public void SkipsAnUnusableStepOnceTheNextOneIsDue()
+    {
+        var playback = new GuidePlayback(
+        [
+            Step(0, 1, "Broil", offset: 0),
+            Step(1, 2, "Assize", offset: 2_500),
+        ]);
+
+        Assert.False(playback.IsDue(-1));
+        Assert.True(playback.IsDue(0));
+        Assert.False(playback.ShouldSkipUnusable(0));
+        Assert.True(playback.ShouldSkipUnusable(2_500));
+
+        playback.Skip();
+        Assert.True(playback.ShouldSkipUnusable(2_500));
+    }
+
     private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0, double offset = 0)
         => new(index, actionId, name, StepKind.Gcd, 1, "Pull", offset)
         {

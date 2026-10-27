@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Author>Proteu</Author>
     <Name>Ultimate Rotation Guide</Name>
     <Punchline>Shows one player's ability order from an FFLogs ultimate pull.</Punchline>
-    <Description>Loads one job's public FFLogs speed rankings for an ultimate and shows that player's ability order. In the selected ultimate, the guide starts at the pull and follows the fight, and it resets if you leave or wipe. It does not press any button.</Description>
+    <Description>Loads one job's public FFLogs speed rankings for an ultimate and shows that player's ability order. In the selected ultimate, the guide starts at the pull and follows the fight, and it resets if you leave or wipe. Automatic rotation is off until you enable it. It then presses each due step for you and skips a step that cannot be used.</Description>
     <Tags>ultimate;rotation;fflogs</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>

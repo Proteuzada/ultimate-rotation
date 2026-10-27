@@ -40,6 +40,11 @@ internal sealed class OverlayWindow : Window
         if (!string.IsNullOrEmpty(view.DutyStatus))
             ImGui.TextWrapped(view.DutyStatus);
 
+        var autoRotation = view.AutoRotation;
+        if (ImGui.Checkbox(UiText.AutoRotation, ref autoRotation) && autoRotation != view.AutoRotation)
+            this.controller.SetAutoRotation(autoRotation);
+        ImGui.TextDisabled(UiText.AutoRotationHint);
+
         var index = view.Index;
         var phase = index < playback.Steps.Count
             ? playback.Steps[index].PhaseName

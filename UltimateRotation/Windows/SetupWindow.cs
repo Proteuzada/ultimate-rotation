@@ -113,6 +113,11 @@ internal sealed class SetupWindow : Window
         if (ImGui.Checkbox("Include oGCDs", ref includeOffGcds) && includeOffGcds != view.IncludeOffGcds)
             this.controller.SetIncludeOffGcds(includeOffGcds);
 
+        var autoRotation = view.AutoRotation;
+        if (ImGui.Checkbox(UiText.AutoRotation, ref autoRotation) && autoRotation != view.AutoRotation)
+            this.controller.SetAutoRotation(autoRotation);
+        ImGui.TextDisabled(UiText.AutoRotationHint);
+
         if (!string.IsNullOrEmpty(view.Error))
             ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), view.Error);
         else if (!string.IsNullOrEmpty(view.Status))
@@ -122,7 +127,6 @@ internal sealed class SetupWindow : Window
             ImGui.TextWrapped(view.DutyStatus);
 
         ImGui.TextDisabled("In the selected ultimate, the guide follows the fight from pull start. Leaving the zone or a wipe resets it.");
-        ImGui.TextDisabled(UiText.GuideOnly);
     }
 
     private void PersistCredentials()

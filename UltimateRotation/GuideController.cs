@@ -37,6 +37,8 @@ internal sealed class GuideSnapshot
     public string GuideTitle { get; init; } = string.Empty;
 
     public string DutyStatus { get; init; } = string.Empty;
+
+    public bool AutoRotation { get; init; }
 }
 
 internal enum DutySync
@@ -77,6 +79,7 @@ internal sealed class GuideController : IDisposable
     private bool pullActive;
     private DateTime? pullStartedUtc;
     private string dutyStatus = string.Empty;
+    private bool autoRotation;
 
     public GuideController(Configuration configuration)
     {
@@ -84,6 +87,7 @@ internal sealed class GuideController : IDisposable
         this.encounterId = UltimateCatalog.GetOrFirst(configuration.LastEncounterId).EncounterId;
         this.jobSpec = JobCatalog.Find(configuration.LastJobSpec)?.SpecName;
         this.includeOffGcds = configuration.IncludeOffGcds;
+        this.autoRotation = configuration.AutoRotation;
     }
 
     public GuideSnapshot Snapshot()
@@ -110,6 +114,7 @@ internal sealed class GuideController : IDisposable
                 Mismatch = this.mismatch,
                 GuideTitle = this.guideTitle,
                 DutyStatus = this.dutyStatus,
+                AutoRotation = this.autoRotation,
             };
         }
     }
@@ -197,6 +202,21 @@ internal sealed class GuideController : IDisposable
         }
 
         this.configuration.IncludeOffGcds = include;
+        this.configuration.Save();
+    }
+
+    public void SetAutoRotation(bool enabled)
+    {
+        lock (this.gate)
+        {
+            this.autoRotation = enabled;
+            if (this.pullActive && this.playback is not null)
+                this.dutyStatus = enabled
+                    ? "Following the pull. Automatic rotation is on."
+                    : "Following the pull.";
+        }
+
+        this.configuration.AutoRotation = enabled;
         this.configuration.Save();
     }
 
@@ -322,6 +342,8 @@ internal sealed class GuideController : IDisposable
                 ? "The log had no abilities after filtering."
                 : $"{steps.Count} steps. In the selected ultimate, the guide follows the pull.";
             this.AlignToActivePull();
+            if (this.autoRotation && this.pullActive)
+                this.dutyStatus = "Following the pull. Automatic rotation is on.";
         }
 
         return steps.Count > 0 && announce;
@@ -330,7 +352,8 @@ internal sealed class GuideController : IDisposable
     /// <summary>
     /// Follows the selected ultimate the way a duty check does: territory id from
     /// ClientState.TerritoryType, and pull start from the rising edge of InCombat.
-    /// Leaving that territory or leaving combat resets the guide. This does not press anything.
+    /// Leaving that territory or leaving combat resets the guide. Pressing a step is separate
+    /// and only happens when automatic rotation is on.
     /// </summary>
     public DutySync SyncDuty(uint territoryType, bool inCombat, DateTime utcNow)
     {
@@ -370,7 +393,9 @@ internal sealed class GuideController : IDisposable
                 this.AlignToActivePull(utcNow);
                 this.dutyStatus = this.playback is null
                     ? $"In {selected.EnglishName}. Load a guide to follow the pull."
-                    : "Following the pull.";
+                    : this.autoRotation
+                        ? "Following the pull. Automatic rotation is on."
+                        : "Following the pull.";
                 return this.playback is null ? DutySync.None : DutySync.PullStarted;
             }
 
@@ -384,10 +409,54 @@ internal sealed class GuideController : IDisposable
                 return this.playback is null ? DutySync.None : DutySync.Reset;
             }
 
-            if (this.pullActive)
+            if (this.pullActive && !this.autoRotation)
                 this.AlignToActivePull(utcNow);
 
             return DutySync.None;
+        }
+    }
+
+    /// <summary>
+    /// When automatic rotation is on, a loaded timeline, and the pull clock is running,
+    /// press the current step once its time has arrived. Then advance. If the action
+    /// cannot be used, skip it instead of pressing. One step per frame.
+    /// </summary>
+    public void ExecuteDueStep(DateTime utcNow)
+    {
+        GuideStep? step = null;
+        var elapsed = 0d;
+        lock (this.gate)
+        {
+            if (!this.autoRotation || !this.pullActive || this.playback is null || this.pullStartedUtc is not { } started)
+                return;
+
+            elapsed = (utcNow - started).TotalMilliseconds;
+            step = this.playback.Current;
+            if (step is null || !this.playback.IsDue(elapsed))
+                return;
+        }
+
+        var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
+        var attempt = LocalPlayerAction.Consider(actionId);
+
+        lock (this.gate)
+        {
+            if (this.playback?.Current is not { } current || current.Index != step.Index)
+                return;
+
+            var advance = attempt switch
+            {
+                ActionAttempt.Used => true,
+                ActionAttempt.Impossible => true,
+                ActionAttempt.Blocked => this.playback.ShouldSkipUnusable(elapsed),
+                _ => false,
+            };
+
+            if (!advance)
+                return;
+
+            this.playback.Skip();
+            this.mismatch = false;
         }
     }
 

@@ -22,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
 
     private readonly WindowSystem windowSystem;
     private readonly GuideController controller;
@@ -70,19 +71,25 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFramework(IFramework framework)
     {
+        var now = DateTime.UtcNow;
         var loaded = this.controller.Pump();
         var sync = this.controller.SyncDuty(
             ClientState.TerritoryType,
             Condition[ConditionFlag.InCombat],
-            DateTime.UtcNow);
+            now);
+        this.controller.ExecuteDueStep(now);
 
         if (loaded || sync == DutySync.PullStarted)
             this.overlay.IsOpen = true;
 
         if (sync == DutySync.PullStarted)
-            Chat.Print("Pull started. The guide is following this fight and does not press any button.");
+        {
+            Chat.Print(this.controller.Snapshot().AutoRotation
+                ? "Pull started. Automatic rotation will press each step when it is due."
+                : "Pull started. The guide is following this fight. Automatic rotation is off.");
+        }
         else if (loaded)
-            Chat.Print("Guide loaded. It advances when you use the ability and does not press any button.");
+            Chat.Print("Guide loaded.");
         else if (sync == DutySync.Reset)
             Chat.Print("Guide reset.");
     }

@@ -3,6 +3,8 @@ namespace UltimateRotation;
 /// <summary>
 /// Outside a pull, steps advance when <see cref="TryAdvance"/> matches an action or the user skips.
 /// During a pull, <see cref="AlignToPull"/> follows milliseconds since the fight started.
+/// Automatic rotation uses <see cref="IsDue"/> and <see cref="ShouldSkipUnusable"/> so a step is
+/// pressed at its clock time and skipped once the next step is due.
 /// </summary>
 public sealed class GuidePlayback
 {
@@ -81,5 +83,27 @@ public sealed class GuidePlayback
         }
 
         this.Index = index;
+    }
+
+    public bool IsDue(double elapsedMs)
+    {
+        var current = this.Current;
+        return current is not null && elapsedMs >= current.OffsetMs;
+    }
+
+    /// <summary>
+    /// A step that cannot be used is kept until the following step is due, then skipped.
+    /// The last step is skipped as soon as it is due and unusable.
+    /// </summary>
+    public bool ShouldSkipUnusable(double elapsedMs)
+    {
+        if (!this.IsDue(elapsedMs))
+            return false;
+
+        var next = this.Index + 1;
+        if (next >= this.steps.Count)
+            return true;
+
+        return elapsedMs >= this.steps[next].OffsetMs;
     }
 }

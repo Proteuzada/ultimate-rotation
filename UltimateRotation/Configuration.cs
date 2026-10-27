@@ -17,5 +17,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool IncludeOffGcds { get; set; } = true;
 
+    public bool AutoRotation { get; set; }
+
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }
