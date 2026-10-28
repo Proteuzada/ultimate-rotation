@@ -801,9 +801,22 @@ internal sealed class GuideController : IDisposable
         if (decision.PressIndex != step.Index)
             return;
 
+        var pressedId = actionId;
         var attempt = potion
             ? drink ? GemdraughtUse.Use(Gemdraughts.StatFor(step.Name, spec)) : ActionAttempt.Impossible
             : LocalPlayerAction.Consider(actionId);
+        if (!potion
+            && attempt == ActionAttempt.Blocked
+            && OffGcdPairs.MaySwap(step.Kind, guideElapsed, step.OffsetMs)
+            && OffGcdPairs.Partner(step.ActionId, step.AdjustedActionId, step.Name) is uint partner)
+        {
+            var swapped = LocalPlayerAction.Consider(partner);
+            if (swapped is ActionAttempt.Used or ActionAttempt.Queued)
+            {
+                attempt = swapped;
+                pressedId = partner;
+            }
+        }
 
         lock (this.gate)
         {
@@ -813,7 +826,7 @@ internal sealed class GuideController : IDisposable
             if (attempt == ActionAttempt.Queued)
             {
                 this.stepQueued = true;
-                this.queuedActionId = actionId;
+                this.queuedActionId = pressedId;
                 this.mismatch = false;
                 return;
             }
