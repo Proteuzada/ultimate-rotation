@@ -9,6 +9,7 @@ namespace UltimateRotation;
 public sealed class GuidePlayback
 {
     private readonly IReadOnlyList<GuideStep> steps;
+    private readonly HashSet<int> crossed = [];
 
     public GuidePlayback(IReadOnlyList<GuideStep> steps)
     {
@@ -48,6 +49,8 @@ public sealed class GuidePlayback
         => this.Current?.PhaseName
            ?? (this.steps.Count == 0 ? string.Empty : this.steps[^1].PhaseName);
 
+    public bool IsCrossed(int index) => this.crossed.Contains(index);
+
     public bool TryAdvance(uint usedActionId, uint usedAdjustedId)
     {
         var current = this.Current;
@@ -56,6 +59,39 @@ public sealed class GuidePlayback
 
         this.Index++;
         return true;
+    }
+
+    /// <summary>
+    /// The used action is the current step, or a later step in this same part.
+    /// Steps jumped over are marked. The queue continues from the skill that was pressed.
+    /// A skill in a later part is left alone.
+    /// </summary>
+    public bool JumpToUsed(uint usedActionId, uint usedAdjustedId)
+    {
+        var current = this.Current;
+        if (current is null)
+            return false;
+
+        if (current.Matches(usedActionId, usedAdjustedId))
+        {
+            this.Index++;
+            return true;
+        }
+
+        var phase = current.PhaseId;
+        for (var i = this.Index + 1; i < this.steps.Count && this.steps[i].PhaseId == phase; i++)
+        {
+            if (!this.steps[i].Matches(usedActionId, usedAdjustedId))
+                continue;
+
+            for (var skipped = this.Index; skipped < i; skipped++)
+                this.crossed.Add(this.steps[skipped].Index);
+
+            this.Index = i + 1;
+            return true;
+        }
+
+        return false;
     }
 
     public void Skip()
@@ -70,7 +106,11 @@ public sealed class GuidePlayback
             this.Index--;
     }
 
-    public void Reset() => this.Index = 0;
+    public void Reset()
+    {
+        this.Index = 0;
+        this.crossed.Clear();
+    }
 
     /// <summary>
     /// Puts the current step on the fight clock. <paramref name="elapsedMs"/> is milliseconds
@@ -78,6 +118,7 @@ public sealed class GuidePlayback
     /// </summary>
     public void AlignToPull(double elapsedMs)
     {
+        this.crossed.Clear();
         if (this.steps.Count == 0)
         {
             this.Index = 0;

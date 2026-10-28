@@ -40,7 +40,7 @@ internal static class ActionIconButton
         return pressed;
     }
 
-    public static void DrawSkillRow(string id, uint iconId, string name, bool current, bool past, bool bringIntoView)
+    public static void DrawSkillRow(string id, uint iconId, string name, bool current, bool past, bool missed, bool bringIntoView)
     {
         const float size = 36f;
         const float rowHeight = 44f;
@@ -82,6 +82,14 @@ internal static class ActionIconButton
             ? new Vector4(0.96f, 0.78f, 0.32f, 1f)
             : new Vector4(1f, 1f, 1f, 0.12f);
         draw.AddRect(min, max, ImGui.GetColorU32(border), 4f, ImDrawFlags.None, current ? 2f : 1f);
+        if (!missed)
+            return;
+
+        var mark = ImGui.GetColorU32(new Vector4(1f, 0.32f, 0.32f, 1f));
+        draw.AddLine(iconMin + new Vector2(7f, 7f), iconMax - new Vector2(7f, 7f), mark, 2.4f);
+        draw.AddLine(new Vector2(iconMax.X - 7f, iconMin.Y + 7f), new Vector2(iconMin.X + 7f, iconMax.Y - 7f), mark, 2.4f);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Skipped");
     }
 
     public static void DrawImage(uint iconId, float size)

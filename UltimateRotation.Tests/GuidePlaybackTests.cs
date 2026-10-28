@@ -65,8 +65,46 @@ public class GuidePlaybackTests
         Assert.Equal(0, playback.PartIndexAt(2_500));
     }
 
-    private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0, double offset = 0)
-        => new(index, actionId, name, StepKind.Gcd, 1, "Pull", offset)
+    [Fact]
+    public void UsingALaterSkillMarksTheSkippedStepsAndContinuesFromIt()
+    {
+        var playback = new GuidePlayback(
+        [
+            Step(0, 10, "Reassemble"),
+            Step(1, 20, "Drill"),
+            Step(2, 30, "Air Anchor"),
+            Step(3, 40, "Drill", phase: 2),
+        ]);
+
+        Assert.True(playback.JumpToUsed(20, 20));
+        Assert.True(playback.IsCrossed(0));
+        Assert.False(playback.IsCrossed(1));
+        Assert.Equal("Air Anchor", playback.Current!.Name);
+
+        Assert.False(playback.JumpToUsed(40, 40));
+        Assert.Equal("Air Anchor", playback.Current!.Name);
+    }
+
+    [Fact]
+    public void UsingTheCurrentSkillAdvancesWithoutACross()
+    {
+        var playback = new GuidePlayback(
+        [
+            Step(0, 10, "Reassemble"),
+            Step(1, 20, "Drill"),
+        ]);
+
+        Assert.True(playback.JumpToUsed(10, 10));
+        Assert.False(playback.IsCrossed(0));
+        Assert.Equal("Drill", playback.Current!.Name);
+
+        playback.Reset();
+        Assert.Equal("Reassemble", playback.Current!.Name);
+        Assert.False(playback.IsCrossed(0));
+    }
+
+    private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0, double offset = 0, int phase = 1)
+        => new(index, actionId, name, StepKind.Gcd, phase, phase == 1 ? "Pull" : "Phase 2", offset)
         {
             AdjustedActionId = adjusted,
         };

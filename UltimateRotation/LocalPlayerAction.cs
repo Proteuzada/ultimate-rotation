@@ -56,6 +56,46 @@ internal static class LocalPlayerAction
         }
     }
 
+    /// <summary>
+    /// Looks at the action without pressing it. A gauge, a missing resource, or a recast
+    /// that is not about to end is <see cref="StepAvailability.Skip"/>. A GCD or short
+    /// recast inside the weave window is <see cref="StepAvailability.Hold"/>.
+    /// </summary>
+    public static unsafe StepAvailability Availability(uint actionId)
+    {
+        try
+        {
+            if (actionId == 0)
+                return StepAvailability.Skip;
+
+            var player = Plugin.Objects.LocalPlayer;
+            var manager = ActionManager.Instance();
+            if (player == null || manager == null)
+                return StepAvailability.Hold;
+
+            var adjusted = manager->GetAdjustedActionId(actionId);
+            if (adjusted == 0)
+                adjusted = actionId;
+
+            if (!TryResolveTarget(adjusted, player, out var targetId, out var waitingForTarget))
+                return waitingForTarget ? StepAvailability.Hold : StepAvailability.Skip;
+
+            if (manager->ActionQueued)
+                return StepAvailability.Hold;
+
+            var status = manager->GetActionStatus(ActionType.Action, adjusted, targetId);
+            if (!StuckStep.IsGaugeOrResource(status) && manager->GetCurrentCharges(adjusted) > 0)
+                status = 0;
+
+            var casting = player.TotalCastTime > 0.05f && player.CurrentCastTime + 0.05f < player.TotalCastTime;
+            return StuckStep.Classify(status, RecastRemainingMs(actionId), AnimationLockMs(), casting);
+        }
+        catch
+        {
+            return StepAvailability.Hold;
+        }
+    }
+
     public static unsafe bool SlotOccupied()
     {
         try

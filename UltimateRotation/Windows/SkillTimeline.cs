@@ -30,6 +30,7 @@ internal sealed class SkillTimeline
                 step.Name,
                 current,
                 past: currentIndex < playback.Steps.Count && i < currentIndex,
+                missed: playback.IsCrossed(step.Index),
                 bringIntoView: bringCurrent && current);
         }
 

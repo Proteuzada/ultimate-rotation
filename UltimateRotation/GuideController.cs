@@ -835,22 +835,7 @@ internal sealed class GuideController : IDisposable
         if (decision.PressIndex != step.Index)
             return;
 
-        var pressedId = actionId;
-        var attempt = potion
-            ? drink ? GemdraughtUse.Use(Gemdraughts.StatFor(step.Name, spec)) : ActionAttempt.Impossible
-            : LocalPlayerAction.Consider(actionId);
-        if (!potion
-            && attempt == ActionAttempt.Blocked
-            && OffGcdPairs.MaySwap(step.Kind, elapsed, step.OffsetMs)
-            && OffGcdPairs.Partner(step.ActionId, step.AdjustedActionId, step.Name) is uint partner)
-        {
-            var swapped = LocalPlayerAction.Consider(partner);
-            if (swapped is ActionAttempt.Used or ActionAttempt.Queued)
-            {
-                attempt = swapped;
-                pressedId = partner;
-            }
-        }
+        var (attempt, pressedId) = this.ChooseAttempt(potion, drink, spec, step, actionId, elapsed);
 
         lock (this.gate)
         {
@@ -886,15 +871,74 @@ internal sealed class GuideController : IDisposable
             if (this.playback is null || this.playback.IsComplete)
                 return;
 
-            if (this.pullActive)
+            if (!this.pullActive)
             {
-                var current = this.playback.Current;
-                this.mismatch = current is not null && !current.Matches(actionId, adjustedActionId);
+                this.mismatch = !this.playback.TryAdvance(actionId, adjustedActionId);
                 return;
             }
 
-            this.mismatch = !this.playback.TryAdvance(actionId, adjustedActionId);
+            var ownRelease = this.stepQueued
+                && (this.queuedActionId == actionId || this.queuedActionId == adjustedActionId);
+            if (ownRelease)
+            {
+                this.mismatch = false;
+                return;
+            }
+
+            if (this.playback.JumpToUsed(actionId, adjustedActionId))
+            {
+                this.stepQueued = false;
+                this.queuedActionId = 0;
+                this.mismatch = false;
+                return;
+            }
+
+            var current = this.playback.Current;
+            this.mismatch = current is not null && !current.Matches(actionId, adjustedActionId);
         }
+    }
+
+    private (ActionAttempt Attempt, uint PressedId) ChooseAttempt(
+        bool potion,
+        bool drink,
+        string? spec,
+        GuideStep step,
+        uint actionId,
+        double elapsed)
+    {
+        if (potion)
+        {
+            var drinkAttempt = drink
+                ? GemdraughtUse.Use(Gemdraughts.StatFor(step.Name, spec))
+                : ActionAttempt.Impossible;
+            return (drinkAttempt, actionId);
+        }
+
+        var logged = LocalPlayerAction.Availability(actionId);
+        uint? partner = null;
+        StepAvailability? partnerState = null;
+        if (OffGcdPairs.MaySwap(step.Kind, elapsed, step.OffsetMs)
+            && OffGcdPairs.Partner(step.ActionId, step.AdjustedActionId, step.Name) is uint other)
+        {
+            partner = other;
+            partnerState = LocalPlayerAction.Availability(other);
+        }
+
+        if (StuckStep.ShouldSkip(logged, partner is null ? null : partnerState))
+            return (ActionAttempt.Impossible, actionId);
+
+        if (logged != StepAvailability.Press && partner is uint ready && partnerState == StepAvailability.Press)
+            return (LocalPlayerAction.Consider(ready), ready);
+
+        var attempt = LocalPlayerAction.Consider(actionId);
+        if (attempt == ActionAttempt.Blocked && partner is uint fallback && partnerState != StepAvailability.Skip)
+        {
+            var swapped = LocalPlayerAction.Consider(fallback);
+            if (swapped is ActionAttempt.Used or ActionAttempt.Queued)
+                return (swapped, fallback);
+        }
+
+        return (attempt, actionId);
     }
 
     public void Skip()
