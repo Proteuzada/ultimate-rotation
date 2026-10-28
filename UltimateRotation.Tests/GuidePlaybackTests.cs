@@ -51,7 +51,7 @@ public class GuidePlaybackTests
     }
 
     [Fact]
-    public void SkipsAnUnusableStepOnceTheNextOneIsDue()
+    public void StaysOnASkillWhenTheNextTimestampArrives()
     {
         var playback = new GuidePlayback(
         [
@@ -60,12 +60,9 @@ public class GuidePlaybackTests
         ]);
 
         Assert.False(playback.IsDue(-1));
-        Assert.True(playback.IsDue(0));
-        Assert.False(playback.ShouldSkipUnusable(0));
-        Assert.True(playback.ShouldSkipUnusable(2_500));
-
-        playback.Skip();
-        Assert.True(playback.ShouldSkipUnusable(2_500));
+        Assert.True(playback.IsDue(2_500));
+        Assert.Equal(0, playback.Index);
+        Assert.Equal(0, playback.PartIndexAt(2_500));
     }
 
     private static GuideStep Step(int index, uint actionId, string name, uint adjusted = 0, double offset = 0)

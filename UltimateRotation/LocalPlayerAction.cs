@@ -37,6 +37,10 @@ internal static class LocalPlayerAction
             if (!TryResolveTarget(adjusted, player, out var targetId, out var waitingForTarget))
                 return waitingForTarget ? ActionAttempt.Blocked : ActionAttempt.Impossible;
 
+            // The game keeps one queued press. A new UseAction would replace it.
+            if (manager->ActionQueued)
+                return ActionAttempt.Blocked;
+
             if (manager->GetActionStatus(ActionType.Action, adjusted, targetId) != 0
                 && !CanQueue(manager, adjusted))
                 return ActionAttempt.Blocked;
@@ -49,6 +53,54 @@ internal static class LocalPlayerAction
         catch
         {
             return ActionAttempt.Impossible;
+        }
+    }
+
+    public static unsafe bool SlotOccupied()
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            return manager != null && manager->ActionQueued;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static unsafe double AnimationLockMs()
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            return manager == null ? 0 : Math.Max(0, manager->AnimationLock) * 1000d;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    public static unsafe double RecastRemainingMs(uint actionId)
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            if (manager == null || actionId == 0)
+                return 0;
+
+            var adjusted = manager->GetAdjustedActionId(actionId);
+            if (adjusted == 0)
+                adjusted = actionId;
+
+            var recast = manager->GetRecastTime(ActionType.Action, adjusted);
+            var elapsed = manager->GetRecastTimeElapsed(ActionType.Action, adjusted);
+            return Math.Max(0, recast - elapsed) * 1000d;
+        }
+        catch
+        {
+            return 0;
         }
     }
 

@@ -713,11 +713,10 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// Holds the current step the way a pressed button does. With queueing on, the press
-    /// can go out during the last half-second of the animation lock so the game fires it
-    /// as that lock ends. A queued press stays the current step until the game uses it.
-    /// One new press per frame. A Gemdraught is sent only when that option is on, and only
-    /// at its timeline time.
+    /// Plays the loaded parse as one queue per fight part. A skill the game can cast is held
+    /// until it is accepted. An oGCD weaves in the animation-lock window and leaves the GCD
+    /// as the held button. A press already stored by the game is not replaced. Only an action
+    /// the game can never cast is skipped. One new press per frame.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
@@ -760,6 +759,7 @@ internal sealed class GuideController : IDisposable
         }
 
         GuideStep? step = null;
+        IReadOnlyList<GuideStep>? steps = null;
         var elapsed = 0d;
         var guideElapsed = 0d;
         var drink = false;
@@ -773,7 +773,8 @@ internal sealed class GuideController : IDisposable
             elapsed = (utcNow - this.pullStartedUtc!.Value).TotalMilliseconds;
             this.EnterCurrentPart(elapsed);
             guideElapsed = this.pace.GuideMs(elapsed);
-            step = this.playback!.Current;
+            steps = this.playback!.Steps;
+            step = this.playback.Current;
             if (step is null)
                 return;
 
@@ -782,13 +783,22 @@ internal sealed class GuideController : IDisposable
             queue = this.queueButtonPresses;
         }
 
-        if (step is null)
+        if (step is null || steps is null)
             return;
 
         var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
         var potion = Gemdraughts.IsStep(step.Name);
-        var lockMs = !potion && queue ? LocalPlayerAction.RemainingLockMs(actionId) : 0;
-        if (!ButtonQueue.ShouldPress(guideElapsed, step.OffsetMs, lockMs, false, queue && !potion))
+        var animation = potion ? 0 : LocalPlayerAction.AnimationLockMs();
+        var recast = !potion && step.Kind == StepKind.Gcd ? LocalPlayerAction.RecastRemainingMs(actionId) : 0;
+        var decision = RotationQueue.Decide(
+            steps,
+            step.Index,
+            guideElapsed,
+            LocalPlayerAction.SlotOccupied(),
+            queue && !potion,
+            animation,
+            recast);
+        if (decision.PressIndex != step.Index)
             return;
 
         var attempt = potion
@@ -808,19 +818,7 @@ internal sealed class GuideController : IDisposable
                 return;
             }
 
-            var advance = attempt switch
-            {
-                ActionAttempt.Used => true,
-                ActionAttempt.Impossible => true,
-                ActionAttempt.Blocked => potion
-                    ? this.playback.ShouldSkipUnusable(guideElapsed)
-                    : CooldownHold.ShouldSkip(
-                        this.playback.ShouldSkipUnusable(guideElapsed),
-                        LocalPlayerAction.RemainingLockMs(actionId)),
-                _ => false,
-            };
-
-            if (!advance)
+            if (attempt == ActionAttempt.Blocked)
                 return;
 
             if (attempt == ActionAttempt.Used)

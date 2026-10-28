@@ -3,8 +3,8 @@ namespace UltimateRotation;
 /// <summary>
 /// Outside a pull, steps advance when <see cref="TryAdvance"/> matches an action or the user skips.
 /// During a pull, <see cref="AlignToPull"/> follows milliseconds since the fight started.
-/// Automatic rotation uses <see cref="IsDue"/> and <see cref="ShouldSkipUnusable"/> so a step is
-/// pressed at its clock time and skipped once the next step is due.
+/// Automatic rotation keeps the current part's queue. A skill stays until the game accepts it.
+/// The next part starts from <see cref="PartIndexAt"/> on its own log time.
 /// </summary>
 public sealed class GuidePlayback
 {
@@ -39,29 +39,10 @@ public sealed class GuidePlayback
     }
 
     /// <summary>
-    /// Stays on the current part until the next part's time. When that time has
-    /// arrived, returns the first step of the latest part the fight clock has reached.
-    /// Skills inside a part are not skipped just because their timestamps have passed.
+    /// Stays on the current part until the next part's log time, then the first step of that part.
     /// </summary>
     public int PartIndexAt(double elapsedMs)
-    {
-        var index = this.Index;
-        if (index >= this.steps.Count)
-            return index;
-
-        for (var i = index + 1; i < this.steps.Count; i++)
-        {
-            if (this.steps[i].PhaseId == this.steps[i - 1].PhaseId)
-                continue;
-
-            if (elapsedMs + 40 < this.steps[i].OffsetMs)
-                break;
-
-            index = i;
-        }
-
-        return index;
-    }
+        => RotationQueue.IndexAt(this.steps, this.Index, elapsedMs);
 
     public string PhaseName
         => this.Current?.PhaseName
@@ -129,21 +110,5 @@ public sealed class GuidePlayback
     {
         var current = this.Current;
         return current is not null && elapsedMs >= current.OffsetMs;
-    }
-
-    /// <summary>
-    /// A step that cannot be used is kept until the following step is due, then skipped.
-    /// The last step is skipped as soon as it is due and unusable.
-    /// </summary>
-    public bool ShouldSkipUnusable(double elapsedMs)
-    {
-        if (!this.IsDue(elapsedMs))
-            return false;
-
-        var next = this.Index + 1;
-        if (next >= this.steps.Count)
-            return true;
-
-        return elapsedMs >= this.steps[next].OffsetMs;
     }
 }

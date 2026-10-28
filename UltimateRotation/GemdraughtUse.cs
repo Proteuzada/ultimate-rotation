@@ -26,6 +26,9 @@ internal static class GemdraughtUse
                 return ActionAttempt.Blocked;
 
             var target = player.GameObjectId;
+            if (manager->ActionQueued)
+                return ActionAttempt.Blocked;
+
             if (manager->GetActionStatus(ActionType.Item, useId, target) != 0)
                 return ActionAttempt.Blocked;
 
