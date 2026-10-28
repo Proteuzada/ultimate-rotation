@@ -37,9 +37,9 @@ public static class ButtonQueue
 
     /// <summary>
     /// The press belongs in the weave window. A GCD is sent only while its recast is inside
-    /// that half-second. An oGCD is sent while the animation lock is open, or in its last
-    /// half-second, and not during the GCD's own last half-second. Nothing is sent before
-    /// the step's time except that same window.
+    /// that half-second. An oGCD has no GCD wait: it is sent in the animation-lock window
+    /// as soon as the step time is reached, even while the GCD recast is still running.
+    /// Nothing is sent before the step's time except that same window.
     /// </summary>
     public static bool InWeaveWindow(
         double elapsedMs,
@@ -66,7 +66,7 @@ public static class ButtonQueue
         if (gcdStep)
             return gcdRemainMs <= ahead;
 
-        return gcdRemainMs <= 0 || gcdRemainMs > WindowMs;
+        return true;
     }
 
     private static double NonNegative(double value)

@@ -659,7 +659,7 @@ internal sealed class GuideController : IDisposable
                 return this.playback is null ? DutySync.None : DutySync.Reset;
             }
 
-            if (this.pullActive && !this.autoRotation && !this.countdownPull)
+            if (this.pullActive && !this.autoRotation && !this.countdownPull && this.playback is { WaitingForFirstSkill: true })
                 this.AlignToActivePull(utcNow);
 
             return DutySync.None;
@@ -748,9 +748,10 @@ internal sealed class GuideController : IDisposable
     /// <summary>
     /// Plays the loaded parse as one queue per fight part. Each step is pressed in the weave
     /// window: animation lock open or in its last half-second, a GCD only while its recast is
-    /// in that half-second, and an oGCD only while the GCD still has room. A skill the game
-    /// can cast is held until it is accepted. A press already stored by the game is not
-    /// replaced. Only an action the game can never cast is skipped. One new press per frame.
+    /// in that half-second. An oGCD has no GCD wait and is sent in that lock window as soon as
+    /// its step time is reached. A skill the game can cast is held until it is accepted. A press
+    /// already stored by the game is not replaced. Only an action the game can never cast is
+    /// skipped, and not before the first skill of the pull is used. One new press per frame.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
@@ -856,6 +857,9 @@ internal sealed class GuideController : IDisposable
             if (attempt == ActionAttempt.Used)
                 this.pace.NoteLate(elapsed, current.OffsetMs);
 
+            if (attempt == ActionAttempt.Impossible && this.playback.WaitingForFirstSkill && !potion)
+                return;
+
             this.playback.Skip();
             this.mismatch = false;
         }
@@ -865,6 +869,10 @@ internal sealed class GuideController : IDisposable
     {
         if (AbilityNoise.IsAlwaysDropped(actionId) || AbilityNoise.IsAlwaysDropped(adjustedActionId))
             return;
+
+        var usedName = GameActions.ClientName(
+            adjustedActionId != 0 ? adjustedActionId : actionId,
+            Plugin.DataManager);
 
         lock (this.gate)
         {
@@ -885,7 +893,7 @@ internal sealed class GuideController : IDisposable
                 return;
             }
 
-            if (this.playback.JumpToUsed(actionId, adjustedActionId))
+            if (this.playback.JumpToUsed(actionId, adjustedActionId, usedName))
             {
                 this.stepQueued = false;
                 this.queuedActionId = 0;
@@ -893,8 +901,16 @@ internal sealed class GuideController : IDisposable
                 return;
             }
 
+            if (!this.playback.FirstSkillUsed)
+            {
+                this.mismatch = false;
+                return;
+            }
+
             var current = this.playback.Current;
-            this.mismatch = current is not null && !current.Matches(actionId, adjustedActionId);
+            this.mismatch = current is not null && !current.Matches(actionId, adjustedActionId)
+                && (string.IsNullOrWhiteSpace(usedName)
+                    || !string.Equals(current.Name, usedName, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -1001,9 +1017,12 @@ internal sealed class GuideController : IDisposable
         if (this.playback is null)
             return;
 
-        var enter = this.playback.PartIndexAt(elapsedMs);
-        while (this.playback.Index < enter && !this.playback.IsComplete)
-            this.playback.Skip();
+        if (!this.playback.WaitingForFirstSkill)
+        {
+            var enter = this.playback.PartIndexAt(elapsedMs);
+            while (this.playback.Index < enter && !this.playback.IsComplete)
+                this.playback.Skip();
+        }
 
         if (this.playback.Current is not { } step)
             return;

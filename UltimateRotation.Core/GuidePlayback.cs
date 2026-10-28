@@ -10,6 +10,7 @@ public sealed class GuidePlayback
 {
     private readonly IReadOnlyList<GuideStep> steps;
     private readonly HashSet<int> crossed = [];
+    private bool firstSkillUsed;
 
     public GuidePlayback(IReadOnlyList<GuideStep> steps)
     {
@@ -51,6 +52,27 @@ public sealed class GuidePlayback
 
     public bool IsCrossed(int index) => this.crossed.Contains(index);
 
+    /// <summary>The opener has been used, so a later press may mark and jump.</summary>
+    public bool FirstSkillUsed => this.firstSkillUsed;
+
+    /// <summary>The pull's first skill has not been used yet. Wrong presses are not errors.</summary>
+    public bool WaitingForFirstSkill => !this.firstSkillUsed && !this.IsComplete;
+
+    /// <summary>First step at or after the pull. Earlier steps are pre-pull.</summary>
+    public int OpenerIndex
+    {
+        get
+        {
+            for (var i = 0; i < this.steps.Count; i++)
+            {
+                if (this.steps[i].OffsetMs >= 0)
+                    return i;
+            }
+
+            return 0;
+        }
+    }
+
     public bool TryAdvance(uint usedActionId, uint usedAdjustedId)
     {
         var current = this.Current;
@@ -62,26 +84,39 @@ public sealed class GuidePlayback
     }
 
     /// <summary>
-    /// The used action is the current step, or a later step in this same part.
-    /// Steps jumped over are marked. The queue continues from the skill that was pressed.
-    /// A skill in a later part is left alone.
+    /// Before the first skill of the pull is used, a different press does not mark or jump.
+    /// Using that skill arms the queue. After that, any later skill in the same part marks
+    /// the steps that were jumped and continues after the skill that was pressed.
+    /// A skill only in a later part is left alone. This is every step, not one pair.
     /// </summary>
-    public bool JumpToUsed(uint usedActionId, uint usedAdjustedId)
+    public bool JumpToUsed(uint usedActionId, uint usedAdjustedId, string? usedName = null)
     {
         var current = this.Current;
         if (current is null)
             return false;
 
-        if (current.Matches(usedActionId, usedAdjustedId))
+        if (!this.firstSkillUsed && this.MatchesStep(this.steps[this.OpenerIndex], usedActionId, usedAdjustedId, usedName))
+        {
+            this.firstSkillUsed = true;
+            if (this.MatchesStep(current, usedActionId, usedAdjustedId, usedName))
+                this.Index++;
+
+            return true;
+        }
+
+        if (this.MatchesStep(current, usedActionId, usedAdjustedId, usedName))
         {
             this.Index++;
             return true;
         }
 
+        if (!this.firstSkillUsed)
+            return false;
+
         var phase = current.PhaseId;
         for (var i = this.Index + 1; i < this.steps.Count && this.steps[i].PhaseId == phase; i++)
         {
-            if (!this.steps[i].Matches(usedActionId, usedAdjustedId))
+            if (!this.MatchesStep(this.steps[i], usedActionId, usedAdjustedId, usedName))
                 continue;
 
             for (var skipped = this.Index; skipped < i; skipped++)
@@ -96,8 +131,13 @@ public sealed class GuidePlayback
 
     public void Skip()
     {
-        if (!this.IsComplete)
-            this.Index++;
+        if (this.IsComplete)
+            return;
+
+        var previous = this.Index;
+        this.Index++;
+        if (previous == this.OpenerIndex)
+            this.firstSkillUsed = true;
     }
 
     public void Back()
@@ -110,6 +150,17 @@ public sealed class GuidePlayback
     {
         this.Index = 0;
         this.crossed.Clear();
+        this.firstSkillUsed = false;
+    }
+
+    private bool MatchesStep(GuideStep step, uint usedActionId, uint usedAdjustedId, string? usedName)
+    {
+        if (step.Matches(usedActionId, usedAdjustedId))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(usedName)
+            && !string.IsNullOrWhiteSpace(step.Name)
+            && step.Name.Equals(usedName, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

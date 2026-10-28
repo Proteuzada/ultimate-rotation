@@ -111,7 +111,8 @@ public sealed class RotationQueue
     }
 
     /// <summary>
-    /// An oGCD is sent in the animation-lock window, and not in the last half-second of the GCD.
+    /// An oGCD is sent in the animation-lock window as soon as its step time is reached.
+    /// It is not held for the GCD recast.
     /// </summary>
     public static bool CanWeave(
         double elapsedMs,
