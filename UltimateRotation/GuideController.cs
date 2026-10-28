@@ -46,6 +46,8 @@ internal sealed class GuideSnapshot
 
     public bool UseGemdraught { get; init; }
 
+    public bool ShowSkills { get; init; }
+
     public IReadOnlyList<ActionChoice> Actions { get; init; } = [];
 }
 
@@ -97,6 +99,7 @@ internal sealed class GuideController : IDisposable
     private bool stepQueued;
     private uint queuedActionId;
     private bool useGemdraught;
+    private bool showSkills;
     private readonly CountdownGate countdown = new();
     private readonly PartPace pace = new();
     private bool dummyPractice;
@@ -122,6 +125,7 @@ internal sealed class GuideController : IDisposable
         this.startOnCountdown = configuration.StartOnCountdown;
         this.queueButtonPresses = configuration.QueueButtonPresses;
         this.useGemdraught = configuration.UseGemdraught;
+        this.showSkills = configuration.ShowSkills;
         this.disabledActions = configuration.DisabledActionIds.ToHashSet();
         this.enabledMitigations = configuration.EnabledMitigationIds.ToHashSet();
     }
@@ -154,6 +158,7 @@ internal sealed class GuideController : IDisposable
                 StartOnCountdown = this.startOnCountdown,
                 QueueButtonPresses = this.queueButtonPresses,
                 UseGemdraught = this.useGemdraught,
+                ShowSkills = this.showSkills,
                 Actions = ActionMenu.Build(
                     this.jobSpec,
                     this.logActions,
@@ -292,6 +297,15 @@ internal sealed class GuideController : IDisposable
         }
 
         this.configuration.QueueButtonPresses = enabled;
+        this.configuration.Save();
+    }
+
+    public void SetShowSkills(bool enabled)
+    {
+        lock (this.gate)
+            this.showSkills = enabled;
+
+        this.configuration.ShowSkills = enabled;
         this.configuration.Save();
     }
 

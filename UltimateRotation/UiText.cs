@@ -17,6 +17,8 @@ internal static class UiText
     public const string QueueButtonPressesHint = "On by default. The GCD stays the held button. An oGCD is weaved while the animation lock is in its last half-second, or as soon as that lock is open. The game stores one press, and the next step does not replace it. Off sends an action only when its time is reached and the lock is open.";
     public const string StartOnCountdown = "Start on countdown";
     public const string StartOnCountdownHint = "Off by default. The current step is pressed at the end of the countdown's 1, while that number is still showing. It does not wait until the number disappears. Cancelling before the 1 does nothing.";
+    public const string ShowSkills = "Show skills";
+    public const string ShowSkillsHint = "Draws each step's skill icon beside the text list. The step being used is highlighted, including while automatic rotation is on.";
     public const string UseGemdraught = "Use Gemdraught";
     public const string UseGemdraughtHint = "Off by default. On a Gemdraught step, automatic rotation drinks the highest grade in your bags for this job: Strength, Dexterity, Intelligence, or Mind. Off skips that step.";
     public const string CommandHelp = "Opens this window. /guide rotation opens the Rotation page. /guide actions opens the Actions page.";

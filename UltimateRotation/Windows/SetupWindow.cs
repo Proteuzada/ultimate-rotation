@@ -17,6 +17,7 @@ internal sealed class SetupWindow : Window
     private readonly Configuration configuration;
     private readonly GuideController controller;
     private readonly ActionBrowser actions = new();
+    private readonly SkillTimeline skills = new();
     private string clientId = string.Empty;
     private string clientSecret = string.Empty;
     private SettingsPage page = SettingsPage.Parses;
@@ -259,6 +260,15 @@ internal sealed class SetupWindow : Window
         if (ImGui.Button("Actions"))
             this.page = SettingsPage.Actions;
         ImGui.SameLine();
+        if (view.ShowSkills)
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.42f, 0.32f, 0.10f, 1f));
+        if (ImGui.Button(UiText.ShowSkills))
+            this.controller.SetShowSkills(!view.ShowSkills);
+        if (view.ShowSkills)
+            ImGui.PopStyleColor();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(UiText.ShowSkillsHint);
+        ImGui.SameLine();
         ImGui.TextDisabled("Opens the Actions page in this window.");
 
         var guideHeight = MathF.Max(180f, ImGui.GetContentRegionAvail().Y);
@@ -304,25 +314,15 @@ internal sealed class SetupWindow : Window
         else
         {
             ImGui.Text($"Step {index + 1} of {playback.Steps.Count}");
-            DrawStep(playback.Steps[index], current: true);
-            ImGui.Spacing();
-            ImGui.Text("Next");
-            var shownPhase = playback.Steps[index].PhaseName;
-            var last = Math.Min(playback.Steps.Count, index + 6);
-            for (var i = index + 1; i < last; i++)
-            {
-                if (playback.Steps[i].PhaseName != shownPhase)
-                {
-                    shownPhase = playback.Steps[i].PhaseName;
-                    ImGui.TextDisabled(shownPhase);
-                }
-
-                DrawStep(playback.Steps[i], current: false);
-            }
         }
 
         if (view.Mismatch)
             ImGui.TextDisabled("The ability you used is not the current step.");
+
+        if (view.ShowSkills && playback.Steps.Count > 0)
+            this.DrawStepsBesideIcons(view, playback, index);
+        else if (index < playback.Steps.Count)
+            DrawTextSteps(playback, index);
 
         if (ImGui.Button("Skip"))
             this.controller.Skip();
@@ -334,6 +334,45 @@ internal sealed class SetupWindow : Window
             this.controller.Reset();
 
         ImGui.TextDisabled(UiText.GuideOnly);
+    }
+
+    private void DrawStepsBesideIcons(GuideSnapshot view, GuidePlayback playback, int index)
+    {
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var avail = ImGui.GetContentRegionAvail();
+        var height = MathF.Max(120f, avail.Y - 64f);
+        var timelineWidth = Math.Clamp(avail.X * 0.42f, 200f, 300f);
+        var textWidth = MathF.Max(160f, avail.X - timelineWidth - spacing);
+
+        using (var text = ImRaii.Child("rotation-text", new Vector2(textWidth, height), false))
+        {
+            if (text && index < playback.Steps.Count)
+                DrawTextSteps(playback, index);
+        }
+
+        ImGui.SameLine(0f, spacing);
+        using var icons = ImRaii.Child("skill-timeline", new Vector2(0f, height), true);
+        if (icons)
+            this.skills.Draw(playback, index, view.JobSpec);
+    }
+
+    private static void DrawTextSteps(GuidePlayback playback, int index)
+    {
+        DrawStep(playback.Steps[index], current: true);
+        ImGui.Spacing();
+        ImGui.Text("Next");
+        var shownPhase = playback.Steps[index].PhaseName;
+        var last = Math.Min(playback.Steps.Count, index + 6);
+        for (var i = index + 1; i < last; i++)
+        {
+            if (playback.Steps[i].PhaseName != shownPhase)
+            {
+                shownPhase = playback.Steps[i].PhaseName;
+                ImGui.TextDisabled(shownPhase);
+            }
+
+            DrawStep(playback.Steps[i], current: false);
+        }
     }
 
     private static void DrawStep(GuideStep step, bool current)

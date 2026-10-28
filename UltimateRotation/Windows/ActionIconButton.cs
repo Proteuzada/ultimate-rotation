@@ -40,6 +40,50 @@ internal static class ActionIconButton
         return pressed;
     }
 
+    public static void DrawSkillRow(string id, uint iconId, string name, bool current, bool past, bool bringIntoView)
+    {
+        const float size = 36f;
+        const float rowHeight = 44f;
+        var width = MathF.Max(size + 8f, ImGui.GetContentRegionAvail().X);
+        ImGui.InvisibleButton(id, new Vector2(width, rowHeight));
+        if (bringIntoView)
+            ImGui.SetScrollHereY(0.35f);
+
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var draw = ImGui.GetWindowDrawList();
+        var fill = current
+            ? new Vector4(0.42f, 0.32f, 0.10f, 1f)
+            : past
+                ? new Vector4(0.08f, 0.08f, 0.09f, 1f)
+                : new Vector4(0.12f, 0.12f, 0.14f, 1f);
+        draw.AddRectFilled(min, max, ImGui.GetColorU32(fill), 4f);
+
+        var iconMin = min + new Vector2(4f, 4f);
+        var iconMax = iconMin + new Vector2(size, size);
+        draw.AddRectFilled(iconMin, iconMax, ImGui.GetColorU32(new Vector4(0.10f, 0.10f, 0.12f, 1f)), 4f);
+        var wrap = Icon(iconId);
+        if (wrap is not null)
+        {
+            draw.AddImage(wrap.Handle, iconMin, iconMax);
+            if (past)
+                draw.AddRectFilled(iconMin, iconMax, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.45f)), 4f);
+        }
+
+        var text = string.IsNullOrWhiteSpace(name) ? "Skill" : name;
+        var color = current
+            ? new Vector4(1f, 0.92f, 0.62f, 1f)
+            : past
+                ? new Vector4(0.65f, 0.65f, 0.65f, 1f)
+                : Vector4.One;
+        draw.AddText(iconMax + new Vector2(8f, 8f), ImGui.GetColorU32(color), text);
+
+        var border = current
+            ? new Vector4(0.96f, 0.78f, 0.32f, 1f)
+            : new Vector4(1f, 1f, 1f, 0.12f);
+        draw.AddRect(min, max, ImGui.GetColorU32(border), 4f, ImDrawFlags.None, current ? 2f : 1f);
+    }
+
     public static void DrawImage(uint iconId, float size)
     {
         var min = ImGui.GetCursorScreenPos();
