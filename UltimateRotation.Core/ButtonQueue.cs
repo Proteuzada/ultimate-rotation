@@ -1,8 +1,10 @@
 namespace UltimateRotation;
 
 /// <summary>
-/// Decides when to hold a button. The game stores one press during the last half-second
-/// of the animation lock and fires it as that lock ends. An immediate press waits for the timeline.
+/// Decides when a press can succeed. UseAction is rejected while the animation lock is
+/// still running, so a GCD is sent only after that lock is clear and its recast is inside
+/// the last half-second. An oGCD is sent once the lock is clear and the step time is reached.
+/// It does not wait for the GCD recast.
 /// </summary>
 public static class ButtonQueue
 {
@@ -36,10 +38,10 @@ public static class ButtonQueue
     }
 
     /// <summary>
-    /// The press belongs in the weave window. A GCD is sent only while its recast is inside
-    /// that half-second. An oGCD has no GCD wait: it is sent in the animation-lock window
-    /// as soon as the step time is reached, even while the GCD recast is still running.
-    /// Nothing is sent before the step's time except that same window.
+    /// The press belongs in the window where UseAction succeeds. The animation lock must
+    /// already be clear: a press during the lock is rejected and the step would be lost.
+    /// A GCD is sent only while its recast is inside the last half-second, which is the
+    /// game's queue window. An oGCD does not wait for that recast.
     /// </summary>
     public static bool InWeaveWindow(
         double elapsedMs,
@@ -54,13 +56,11 @@ public static class ButtonQueue
 
         animationLockMs = NonNegative(animationLockMs);
         gcdRemainMs = NonNegative(gcdRemainMs);
+        if (animationLockMs > 0)
+            return false;
 
         var ahead = queueEarly ? WindowMs : 0d;
         if (elapsedMs + ahead + LandSlackMs < offsetMs)
-            return false;
-
-        var lockOpen = animationLockMs <= 0 || (queueEarly && animationLockMs <= WindowMs);
-        if (!lockOpen)
             return false;
 
         if (gcdStep)

@@ -8,9 +8,9 @@ public enum StepAvailability
 }
 
 /// <summary>
-/// A timeline step that cannot become ready is skipped. A GCD or other recast that is
-/// already inside the weave window is held, because it is about to come back.
-/// An empty gauge or a missing resource is never that window.
+/// A timeline step that cannot become ready is skipped. A recast, a cast, or a rejection
+/// this instant is held and pressed again, because UseAction would not keep it.
+/// An empty gauge or a missing resource is never that wait.
 /// </summary>
 public static class StuckStep
 {
@@ -30,6 +30,9 @@ public static class StuckStep
     public static bool IsGaugeOrResource(uint status) => status is NotEnoughHp or NotEnoughMp or NotEnoughGp
         or NotEnoughCp or RequirementNotMet or NotEnoughEp;
 
+    public const uint Casting = 580;
+    public const uint CannotExecute = 579;
+
     public static StepAvailability Classify(uint status, double recastRemainMs, double animationLockMs, bool casting)
     {
         if (casting)
@@ -38,15 +41,10 @@ public static class StuckStep
         if (IsGaugeOrResource(status) || IsHardImpediment(status))
             return StepAvailability.Skip;
 
-        var recast = NonNegative(recastRemainMs);
-        var animation = NonNegative(animationLockMs);
-        var comingBack = recast is > 0 and <= ButtonQueue.WindowMs
-            || animation is > 0 and <= ButtonQueue.WindowMs;
-        if (comingBack)
+        // On cooldown, still casting, or not executable this instant. UseAction would
+        // reject the press, so the step is held and tried again. It is not dropped.
+        if (status != 0 || NonNegative(recastRemainMs) > 0 || NonNegative(animationLockMs) > 0)
             return StepAvailability.Hold;
-
-        if (status == OnCooldown || status != 0)
-            return StepAvailability.Skip;
 
         return StepAvailability.Press;
     }

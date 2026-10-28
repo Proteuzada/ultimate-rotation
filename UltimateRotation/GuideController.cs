@@ -746,12 +746,12 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// Plays the loaded parse as one queue per fight part. Each step is pressed in the weave
-    /// window: animation lock open or in its last half-second, a GCD only while its recast is
-    /// in that half-second. An oGCD has no GCD wait and is sent in that lock window as soon as
-    /// its step time is reached. A skill the game can cast is held until it is accepted. A press
-    /// already stored by the game is not replaced. Only an action the game can never cast is
-    /// skipped, and not before the first skill of the pull is used. One new press per frame.
+    /// Plays the loaded parse as one queue per fight part. UseAction is sent only after the
+    /// animation lock is clear: a press during the lock is rejected. A GCD is sent in the last
+    /// half-second of its recast. An oGCD does not wait for that recast. A press the game does
+    /// not keep is tried again. A skill the game can cast is held until it fires. A press already
+    /// stored by the game is not replaced. Only an action the game can never cast is skipped,
+    /// and not before the first skill of the pull is used. One new press per frame.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
@@ -780,16 +780,9 @@ internal sealed class GuideController : IDisposable
                 if (stillQueued)
                     return;
 
-                var releasedElapsed = this.pullStartedUtc is { } started
-                    ? (utcNow - started).TotalMilliseconds
-                    : 0;
-                if (this.playback?.Current is { } finished)
-                    this.pace.NoteLate(releasedElapsed, finished.OffsetMs);
-
+                // The slot closed without the cast. The step stays due and is pressed again.
                 this.stepQueued = false;
                 this.queuedActionId = 0;
-                this.playback?.Skip();
-                this.mismatch = false;
             }
         }
 
@@ -889,6 +882,9 @@ internal sealed class GuideController : IDisposable
                 && (this.queuedActionId == actionId || this.queuedActionId == adjustedActionId);
             if (ownRelease)
             {
+                this.stepQueued = false;
+                this.queuedActionId = 0;
+                this.playback.Skip();
                 this.mismatch = false;
                 return;
             }

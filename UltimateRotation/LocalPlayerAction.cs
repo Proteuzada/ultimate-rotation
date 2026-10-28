@@ -37,22 +37,33 @@ internal static class LocalPlayerAction
             if (!TryResolveTarget(adjusted, player, out var targetId, out var waitingForTarget))
                 return waitingForTarget ? ActionAttempt.Blocked : ActionAttempt.Impossible;
 
-            // The game keeps one queued press. A new UseAction would replace it.
+            // The slot holds one press. Replacing it drops whichever action was stored.
             if (manager->ActionQueued)
+                return IsQueued(manager, adjusted) || IsQueued(manager, actionId)
+                    ? ActionAttempt.Queued
+                    : ActionAttempt.Blocked;
+
+            // UseAction is rejected while the animation lock or a cast is still running.
+            if (manager->AnimationLock > 0.001f)
                 return ActionAttempt.Blocked;
 
-            if (manager->GetActionStatus(ActionType.Action, adjusted, targetId) != 0
-                && !CanQueue(manager, adjusted))
+            if (player.TotalCastTime > 0.05f && player.CurrentCastTime + 0.05f < player.TotalCastTime)
+                return ActionAttempt.Blocked;
+
+            var status = manager->GetActionStatus(ActionType.Action, adjusted, targetId);
+            if (status != 0 && !InGameQueueWindow(manager, adjusted))
                 return ActionAttempt.Blocked;
 
             if (!manager->UseAction(ActionType.Action, adjusted, targetId))
                 return ActionAttempt.Blocked;
 
-            return IsQueued(manager, adjusted) ? ActionAttempt.Queued : ActionAttempt.Used;
+            return IsQueued(manager, adjusted) || IsQueued(manager, actionId)
+                ? ActionAttempt.Queued
+                : ActionAttempt.Used;
         }
         catch
         {
-            return ActionAttempt.Impossible;
+            return ActionAttempt.Blocked;
         }
     }
 
@@ -213,17 +224,16 @@ internal static class LocalPlayerAction
         }
     }
 
-    private static unsafe bool CanQueue(ActionManager* manager, uint actionId)
+    /// <summary>
+    /// The game accepts one queued GCD during the last half-second of its recast,
+    /// after the animation lock has already cleared. An oGCD is not given that wait.
+    /// </summary>
+    private static unsafe bool InGameQueueWindow(ActionManager* manager, uint actionId)
     {
-        if (manager->ActionQueued)
-            return false;
-
-        var animation = Math.Max(0, manager->AnimationLock);
         var recast = manager->GetRecastTime(ActionType.Action, actionId);
         var elapsed = manager->GetRecastTimeElapsed(ActionType.Action, actionId);
-        var cooldown = Math.Max(0, recast - elapsed);
-        var remaining = Math.Max(animation, cooldown);
-        return remaining > 0 && remaining <= ButtonQueue.WindowMs / 1000d;
+        var remain = Math.Max(0, recast - elapsed);
+        return remain > 0 && remain <= ButtonQueue.WindowMs / 1000d;
     }
 
     private static unsafe bool IsQueued(ActionManager* manager, uint actionId)

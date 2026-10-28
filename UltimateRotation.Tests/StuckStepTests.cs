@@ -24,11 +24,19 @@ public class StuckStepTests
     }
 
     [Fact]
-    public void ALongRecastIsSkippedBecauseTheSkillWasAlreadyUsed()
+    public void ALongRecastIsHeldUntilThePressCanSucceed()
     {
         var availability = StuckStep.Classify(StuckStep.OnCooldown, recastRemainMs: 12_000, animationLockMs: 0, casting: false);
 
-        Assert.Equal(StepAvailability.Skip, availability);
+        Assert.Equal(StepAvailability.Hold, availability);
+    }
+
+    [Fact]
+    public void ATransientRejectionIsHeldInsteadOfDropped()
+    {
+        Assert.Equal(StepAvailability.Hold, StuckStep.Classify(StuckStep.CannotExecute, 0, 0, false));
+        Assert.Equal(StepAvailability.Hold, StuckStep.Classify(StuckStep.Casting, 0, 0, false));
+        Assert.Equal(StepAvailability.Hold, StuckStep.Classify(StuckStep.OnCooldown, 0, 0, false));
     }
 
     [Fact]
