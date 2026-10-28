@@ -839,7 +839,9 @@ internal sealed class GuideController : IDisposable
             if (attempt == ActionAttempt.Queued)
             {
                 this.stepQueued = true;
-                this.queuedActionId = pressedId;
+                this.queuedActionId = LocalPlayerAction.LastSentId != 0
+                    ? LocalPlayerAction.LastSentId
+                    : pressedId;
                 this.mismatch = false;
                 return;
             }
@@ -847,15 +849,33 @@ internal sealed class GuideController : IDisposable
             if (attempt == ActionAttempt.Blocked)
                 return;
 
-            if (attempt == ActionAttempt.Used)
-                this.pace.NoteLate(elapsed, current.OffsetMs);
-
             if (attempt == ActionAttempt.Impossible && this.playback.WaitingForFirstSkill && !potion)
                 return;
 
+            if (attempt == ActionAttempt.Impossible)
+            {
+                this.playback.Skip();
+                this.mismatch = false;
+                return;
+            }
+
+            // The cast already happened and the hook did not move the index.
+            // Potions never reach the hook. A combat cast the hook saw returned above.
+            this.pace.NoteLate(elapsed, current.OffsetMs);
             this.playback.Skip();
             this.mismatch = false;
         }
+    }
+
+    private bool IsOwnCast(uint actionId, uint adjusted)
+    {
+        if (LocalPlayerAction.IsExpected(actionId, adjusted))
+            return true;
+
+        if (!this.stepQueued || this.queuedActionId == 0)
+            return false;
+
+        return actionId == this.queuedActionId || adjusted == this.queuedActionId;
     }
 
     public void NotifyLocalAction(uint actionId, uint adjustedActionId)
@@ -878,9 +898,7 @@ internal sealed class GuideController : IDisposable
                 return;
             }
 
-            var ownRelease = this.stepQueued
-                && (this.queuedActionId == actionId || this.queuedActionId == adjustedActionId);
-            if (ownRelease)
+            if (this.IsOwnCast(actionId, adjustedActionId))
             {
                 this.stepQueued = false;
                 this.queuedActionId = 0;

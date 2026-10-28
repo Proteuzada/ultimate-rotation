@@ -46,6 +46,12 @@ public class RotationQueueTests
         var locked = RotationQueue.Decide(steps, 0, elapsedMs: 1_000, slotOccupied: false, queueEarly: true, animationLockMs: 200, gcdRemainMs: 400);
         Assert.Null(locked.PressIndex);
         Assert.Equal(0, locked.HeldGcdIndex);
+
+        var outsideHalfSecond = RotationQueue.Decide(steps, 0, elapsedMs: 1_000, slotOccupied: false, queueEarly: true, animationLockMs: 0, gcdRemainMs: 600);
+        Assert.Null(outsideHalfSecond.PressIndex);
+
+        var queued = RotationQueue.Decide(steps, 2, elapsedMs: 2_200, slotOccupied: false, queueEarly: true, animationLockMs: 0, gcdRemainMs: 200);
+        Assert.Equal(2, queued.PressIndex);
     }
 
     [Fact]
@@ -89,6 +95,7 @@ public class RotationQueueTests
     {
         Assert.False(RotationQueue.CanWeave(600, 900, animationLockMs: 400, gcdRemainMs: 1_500, queueEarly: true));
         Assert.False(RotationQueue.CanWeave(600, 900, animationLockMs: 400, gcdRemainMs: 1_500, queueEarly: false));
+        Assert.False(RotationQueue.CanWeave(700, 900, animationLockMs: 0, gcdRemainMs: 0, queueEarly: true));
         Assert.True(RotationQueue.CanWeave(900, 900, animationLockMs: 0, gcdRemainMs: 1_500, queueEarly: true));
         Assert.False(RotationQueue.CanWeave(1_000, 600, animationLockMs: 800, gcdRemainMs: 1_500, queueEarly: true));
         Assert.True(RotationQueue.CanWeave(3_000, 600, animationLockMs: 0, gcdRemainMs: 400, queueEarly: true));

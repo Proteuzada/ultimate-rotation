@@ -59,14 +59,18 @@ public static class ButtonQueue
         if (animationLockMs > 0)
             return false;
 
+        if (!gcdStep)
+        {
+            // The lock just opened and the step time has arrived. An oGCD fires now.
+            // It is not queued ahead of its time, and the GCD recast is not consulted.
+            return elapsedMs + LandSlackMs >= offsetMs;
+        }
+
         var ahead = queueEarly ? WindowMs : 0d;
         if (elapsedMs + ahead + LandSlackMs < offsetMs)
             return false;
 
-        if (gcdStep)
-            return gcdRemainMs <= ahead;
-
-        return true;
+        return gcdRemainMs <= ahead;
     }
 
     private static double NonNegative(double value)

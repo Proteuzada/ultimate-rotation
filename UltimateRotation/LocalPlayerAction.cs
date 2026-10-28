@@ -18,6 +18,32 @@ internal enum ActionAttempt
 /// </summary>
 internal static class LocalPlayerAction
 {
+    private static uint expectingId;
+    private static uint expectingAdjusted;
+
+    /// <summary>The id passed to the last UseAction, kept after the call returns.</summary>
+    public static uint LastSentId { get; private set; }
+
+    /// <summary>The action id of the UseAction call that is on the stack, if we made it.</summary>
+    public static void Expect(uint actionId, uint adjusted)
+    {
+        expectingId = actionId;
+        expectingAdjusted = adjusted == 0 ? actionId : adjusted;
+        LastSentId = expectingAdjusted;
+    }
+
+    public static void ClearExpect()
+    {
+        expectingId = 0;
+        expectingAdjusted = 0;
+    }
+
+    public static bool IsExpected(uint actionId, uint adjusted)
+        => MatchesExpected(actionId) || MatchesExpected(adjusted);
+
+    private static bool MatchesExpected(uint id)
+        => id != 0 && (id == expectingId || id == expectingAdjusted);
+
     public static unsafe ActionAttempt Consider(uint actionId)
     {
         try
@@ -39,9 +65,14 @@ internal static class LocalPlayerAction
 
             // The slot holds one press. Replacing it drops whichever action was stored.
             if (manager->ActionQueued)
-                return IsQueued(manager, adjusted) || IsQueued(manager, actionId)
-                    ? ActionAttempt.Queued
-                    : ActionAttempt.Blocked;
+            {
+                if (!IsQueued(manager, adjusted) && !IsQueued(manager, actionId))
+                    return ActionAttempt.Blocked;
+
+                var queuedId = manager->QueuedActionId;
+                LastSentId = queuedId != 0 ? queuedId : adjusted;
+                return ActionAttempt.Queued;
+            }
 
             // UseAction is rejected while the animation lock or a cast is still running.
             if (manager->AnimationLock > 0.001f)
@@ -54,12 +85,30 @@ internal static class LocalPlayerAction
             if (status != 0 && !InGameQueueWindow(manager, adjusted))
                 return ActionAttempt.Blocked;
 
-            if (!manager->UseAction(ActionType.Action, adjusted, targetId))
+            Expect(actionId, adjusted);
+            bool fired;
+            try
+            {
+                fired = manager->UseAction(ActionType.Action, adjusted, targetId);
+            }
+            finally
+            {
+                ClearExpect();
+            }
+
+            if (!fired)
                 return ActionAttempt.Blocked;
 
-            return IsQueued(manager, adjusted) || IsQueued(manager, actionId)
-                ? ActionAttempt.Queued
-                : ActionAttempt.Used;
+            // ActionQueued means the game stored the press. That is not the cast.
+            if (manager->ActionQueued)
+            {
+                var queuedId = manager->QueuedActionId;
+                if (queuedId != 0)
+                    LastSentId = queuedId;
+                return ActionAttempt.Queued;
+            }
+
+            return ActionAttempt.Used;
         }
         catch
         {
@@ -68,9 +117,9 @@ internal static class LocalPlayerAction
     }
 
     /// <summary>
-    /// Looks at the action without pressing it. A gauge, a missing resource, or a recast
-    /// that is not about to end is <see cref="StepAvailability.Skip"/>. A GCD or short
-    /// recast inside the weave window is <see cref="StepAvailability.Hold"/>.
+    /// Looks at the action without pressing it. An empty gauge or a missing resource is
+    /// <see cref="StepAvailability.Skip"/>. A recast, a cast, or the animation lock is
+    /// <see cref="StepAvailability.Hold"/> and the press is tried again.
     /// </summary>
     public static unsafe StepAvailability Availability(uint actionId)
     {

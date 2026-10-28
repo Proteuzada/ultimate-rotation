@@ -61,11 +61,13 @@ internal sealed class ActionObserver : IDisposable
         if (!executed || actionType != ActionType.Action)
             return executed;
 
-        // A queued press is delivered again with UseActionMode.Queue when it actually fires.
-        if (mode != ActionManager.UseActionMode.Queue
-            && manager->ActionQueued
-            && manager->QueuedActionId == actionId)
-            return executed;
+        // Storing the press is not the cast. The game delivers the cast with UseActionMode.Queue.
+        if (mode != ActionManager.UseActionMode.Queue && manager->ActionQueued)
+        {
+            var queued = manager->QueuedActionId;
+            if (queued == actionId || LocalPlayerAction.IsExpected(actionId, queued))
+                return executed;
+        }
 
         var adjusted = actionId;
         try
