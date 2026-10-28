@@ -746,10 +746,11 @@ internal sealed class GuideController : IDisposable
     }
 
     /// <summary>
-    /// Plays the loaded parse as one queue per fight part. A skill the game can cast is held
-    /// until it is accepted. An oGCD weaves in the animation-lock window and leaves the GCD
-    /// as the held button. A press already stored by the game is not replaced. Only an action
-    /// the game can never cast is skipped. One new press per frame.
+    /// Plays the loaded parse as one queue per fight part. Each step is pressed in the weave
+    /// window: animation lock open or in its last half-second, a GCD only while its recast is
+    /// in that half-second, and an oGCD only while the GCD still has room. A skill the game
+    /// can cast is held until it is accepted. A press already stored by the game is not
+    /// replaced. Only an action the game can never cast is skipped. One new press per frame.
     /// </summary>
     public void ExecuteDueStep(DateTime utcNow)
     {
@@ -794,7 +795,6 @@ internal sealed class GuideController : IDisposable
         GuideStep? step = null;
         IReadOnlyList<GuideStep>? steps = null;
         var elapsed = 0d;
-        var guideElapsed = 0d;
         var drink = false;
         string? spec = null;
         var queue = false;
@@ -805,7 +805,6 @@ internal sealed class GuideController : IDisposable
 
             elapsed = (utcNow - this.pullStartedUtc!.Value).TotalMilliseconds;
             this.EnterCurrentPart(elapsed);
-            guideElapsed = this.pace.GuideMs(elapsed);
             steps = this.playback!.Steps;
             step = this.playback.Current;
             if (step is null)
@@ -822,15 +821,17 @@ internal sealed class GuideController : IDisposable
         var actionId = step.AdjustedActionId != 0 ? step.AdjustedActionId : step.ActionId;
         var potion = Gemdraughts.IsStep(step.Name);
         var animation = potion ? 0 : LocalPlayerAction.AnimationLockMs();
-        var recast = !potion && step.Kind == StepKind.Gcd ? LocalPlayerAction.RecastRemainingMs(actionId) : 0;
+        var gcdRemain = potion ? 0 : LocalPlayerAction.WeaponRemainMs();
+        if (!potion && step.Kind == StepKind.Gcd)
+            gcdRemain = Math.Max(gcdRemain, LocalPlayerAction.RecastRemainingMs(actionId));
         var decision = RotationQueue.Decide(
             steps,
             step.Index,
-            guideElapsed,
+            elapsed,
             LocalPlayerAction.SlotOccupied(),
             queue && !potion,
             animation,
-            recast);
+            gcdRemain);
         if (decision.PressIndex != step.Index)
             return;
 
@@ -840,7 +841,7 @@ internal sealed class GuideController : IDisposable
             : LocalPlayerAction.Consider(actionId);
         if (!potion
             && attempt == ActionAttempt.Blocked
-            && OffGcdPairs.MaySwap(step.Kind, guideElapsed, step.OffsetMs)
+            && OffGcdPairs.MaySwap(step.Kind, elapsed, step.OffsetMs)
             && OffGcdPairs.Partner(step.ActionId, step.AdjustedActionId, step.Name) is uint partner)
         {
             var swapped = LocalPlayerAction.Consider(partner);

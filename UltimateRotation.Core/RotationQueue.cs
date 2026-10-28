@@ -89,52 +89,37 @@ public sealed class RotationQueue
     public static QueueDecision Decide(
         IReadOnlyList<GuideStep> steps,
         int index,
-        double guideMs,
+        double elapsedMs,
         bool slotOccupied,
         bool queueEarly,
         double animationLockMs,
-        double heldGcdRecastMs)
+        double gcdRemainMs)
     {
         var held = HeldGcdIndex(steps, index);
         if (slotOccupied || index < 0 || index >= steps.Count)
             return new QueueDecision(null, held);
 
         var step = steps[index];
-        if (held is int gcd && gcd != index)
-        {
-            var weave = CanWeave(guideMs, step.OffsetMs, animationLockMs, queueEarly);
-            return new QueueDecision(weave ? index : null, held);
-        }
-
-        var lockMs = Math.Max(Normalize(animationLockMs), Normalize(heldGcdRecastMs));
-        var press = ButtonQueue.ShouldPress(guideMs, step.OffsetMs, lockMs, false, queueEarly);
+        var press = ButtonQueue.InWeaveWindow(
+            elapsedMs,
+            step.OffsetMs,
+            step.Kind == StepKind.Gcd,
+            animationLockMs,
+            gcdRemainMs,
+            queueEarly);
         return new QueueDecision(press ? index : null, held);
     }
 
     /// <summary>
-    /// An oGCD may be sent when its time has arrived and the animation lock is open,
-    /// or queued during the last half-second of that lock. A long lock waits.
+    /// An oGCD is sent in the animation-lock window, and not in the last half-second of the GCD.
     /// </summary>
-    public static bool CanWeave(double guideMs, double offsetMs, double animationLockMs, bool queueEarly)
-    {
-        animationLockMs = Normalize(animationLockMs);
-        var due = guideMs >= offsetMs;
-        var landsInWindow = queueEarly
-            && animationLockMs > 0
-            && animationLockMs <= ButtonQueue.WindowMs
-            && guideMs + animationLockMs + 40 >= offsetMs;
-
-        if (!due && !landsInWindow)
-            return false;
-
-        if (animationLockMs <= 0)
-            return due;
-
-        return queueEarly && animationLockMs <= ButtonQueue.WindowMs;
-    }
-
-    private static double Normalize(double value)
-        => double.IsNaN(value) || value < 0 ? 0 : value;
+    public static bool CanWeave(
+        double elapsedMs,
+        double offsetMs,
+        double animationLockMs,
+        double gcdRemainMs,
+        bool queueEarly)
+        => ButtonQueue.InWeaveWindow(elapsedMs, offsetMs, gcdStep: false, animationLockMs, gcdRemainMs, queueEarly);
 }
 
 public sealed record RotationPart(int PhaseId, string Name, int FirstIndex, int LastIndex, double StartMs);

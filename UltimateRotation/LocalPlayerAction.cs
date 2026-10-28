@@ -69,6 +69,32 @@ internal static class LocalPlayerAction
         }
     }
 
+    public const int GcdRecastGroup = 58;
+
+    /// <summary>
+    /// Remaining time on the weaponskill GCD, in milliseconds. This is the same recast
+    /// a rotation uses to decide the weave window, not an oGCD's own cooldown.
+    /// </summary>
+    public static unsafe double WeaponRemainMs()
+    {
+        try
+        {
+            var manager = ActionManager.Instance();
+            if (manager == null)
+                return 0;
+
+            var detail = manager->GetRecastGroupDetail(GcdRecastGroup);
+            if (detail == null || !detail->IsActive)
+                return 0;
+
+            return Math.Max(0, detail->Total - detail->Elapsed) * 1000d;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     public static unsafe double AnimationLockMs()
     {
         try
