@@ -30,14 +30,18 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GuideController controller;
     private readonly ActionObserver observer;
     private readonly SetupWindow setup;
+    private readonly SkillTimelineWindow skills;
+    private bool skillsWindowOpen;
 
     public Plugin()
     {
         var configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         this.controller = new GuideController(configuration);
         this.setup = new SetupWindow(configuration, this.controller);
+        this.skills = new SkillTimelineWindow(this.controller);
         this.windowSystem = new WindowSystem("UltimateRotation");
         this.windowSystem.AddWindow(this.setup);
+        this.windowSystem.AddWindow(this.skills);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
         {
@@ -48,6 +52,7 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = UiText.AliasHelp,
         });
 
+        PluginInterface.UiBuilder.Draw += this.SyncSkillsWindow;
         PluginInterface.UiBuilder.Draw += this.windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += this.ToggleSetup;
         PluginInterface.UiBuilder.OpenMainUi += this.ToggleSetup;
@@ -58,6 +63,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         Framework.Update -= this.OnFramework;
+        PluginInterface.UiBuilder.Draw -= this.SyncSkillsWindow;
         PluginInterface.UiBuilder.Draw -= this.windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleSetup;
         PluginInterface.UiBuilder.OpenMainUi -= this.ToggleSetup;
@@ -113,4 +119,22 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private void ToggleSetup() => this.setup.Toggle();
+
+    private void SyncSkillsWindow()
+    {
+        var view = this.controller.Snapshot();
+        var open = view.ShowSkills && view.SkillsDetached;
+
+        // The close button clears IsOpen before OnClose runs. Treat that as Attach,
+        // or the next sync would open the window again.
+        if (this.skillsWindowOpen && !this.skills.IsOpen && open)
+        {
+            this.controller.SetSkillsDetached(false);
+            open = false;
+        }
+
+        this.skillsWindowOpen = open;
+        if (this.skills.IsOpen != open)
+            this.skills.IsOpen = open;
+    }
 }

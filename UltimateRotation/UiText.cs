@@ -19,6 +19,11 @@ internal static class UiText
     public const string StartOnCountdownHint = "Off by default. The current step is pressed at the end of the countdown's 1, while that number is still showing. It does not wait until the number disappears. Cancelling before the 1 does nothing.";
     public const string ShowSkills = "Show skills";
     public const string ShowSkillsHint = "Draws each step's skill icon beside the text list. The step being used is highlighted, including while automatic rotation is on.";
+    public const string SkillsWindow = "Skills###UltimateRotationSkills";
+    public const string Detach = "Detach";
+    public const string Attach = "Attach";
+    public const string DetachHint = "Opens this icon timeline in its own window. The step being used stays highlighted, including while automatic rotation is on.";
+    public const string AttachHint = "Puts the icon timeline back beside the text list.";
     public const string UseGemdraught = "Use Gemdraught";
     public const string UseGemdraughtHint = "Off by default. On a Gemdraught step, automatic rotation drinks the highest grade in your bags for this job: Strength, Dexterity, Intelligence, or Mind. Off skips that step.";
     public const string CommandHelp = "Opens this window. /guide rotation opens the Rotation page. /guide actions opens the Actions page.";

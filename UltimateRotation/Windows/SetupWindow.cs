@@ -319,7 +319,7 @@ internal sealed class SetupWindow : Window
         if (view.Mismatch)
             ImGui.TextDisabled("The ability you used is not the current step.");
 
-        if (view.ShowSkills && playback.Steps.Count > 0)
+        if (view.ShowSkills && !view.SkillsDetached && playback.Steps.Count > 0)
             this.DrawStepsBesideIcons(view, playback, index);
         else if (index < playback.Steps.Count)
             DrawTextSteps(playback, index);
@@ -354,9 +354,24 @@ internal sealed class SetupWindow : Window
         }
 
         ImGui.SameLine(0f, spacing);
-        using var icons = ImRaii.Child("skill-timeline", new Vector2(0f, height), true);
-        if (icons)
-            this.skills.Draw(playback, index, view.JobSpec);
+        using (var icons = ImRaii.Child("skill-timeline", new Vector2(0f, height), true))
+        {
+            if (icons)
+                this.DrawIconColumn(playback, index, view.JobSpec);
+        }
+    }
+
+    private void DrawIconColumn(GuidePlayback playback, int index, string? jobSpec)
+    {
+        if (ImGui.SmallButton(UiText.Detach))
+            this.controller.SetSkillsDetached(true);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(UiText.DetachHint);
+
+        var listHeight = MathF.Max(80f, ImGui.GetContentRegionAvail().Y);
+        using var list = ImRaii.Child("skill-timeline-list", new Vector2(0f, listHeight), false);
+        if (list)
+            this.skills.Draw(playback, index, jobSpec);
     }
 
     private static void DrawTextSteps(GuidePlayback playback, int index)

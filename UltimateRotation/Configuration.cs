@@ -27,6 +27,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ShowSkills { get; set; }
 
+    public bool SkillsDetached { get; set; }
+
     public List<uint> DisabledActionIds { get; set; } = [];
 
     public List<uint> EnabledMitigationIds { get; set; } = [];
