@@ -346,8 +346,11 @@ internal sealed class SetupWindow : Window
 
         using (var text = ImRaii.Child("rotation-text", new Vector2(textWidth, height), false))
         {
-            if (text && index < playback.Steps.Count)
-                DrawTextSteps(playback, index);
+            if (text)
+            {
+                if (index < playback.Steps.Count)
+                    DrawTextSteps(playback, index);
+            }
         }
 
         ImGui.SameLine(0f, spacing);
