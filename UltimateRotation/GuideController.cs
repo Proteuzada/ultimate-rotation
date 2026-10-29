@@ -50,6 +50,8 @@ internal sealed class GuideSnapshot
 
     public bool SkillsDetached { get; init; }
 
+    public bool OpenerTraining { get; init; }
+
     public IReadOnlyList<ActionChoice> Actions { get; init; } = [];
 }
 
@@ -106,6 +108,10 @@ internal sealed class GuideController : IDisposable
     private readonly CountdownGate countdown = new();
     private readonly PartPace pace = new();
     private bool dummyPractice;
+    private bool openerTraining;
+    private GuidePlayback? parsePlayback;
+    private string parseTitle = string.Empty;
+    private string parseStatus = string.Empty;
     private readonly HashSet<uint> disabledActions;
     private readonly HashSet<uint> enabledMitigations;
     private List<LogAction> logActions = [];
@@ -130,8 +136,14 @@ internal sealed class GuideController : IDisposable
         this.useGemdraught = configuration.UseGemdraught;
         this.showSkills = configuration.ShowSkills;
         this.skillsDetached = configuration.SkillsDetached;
+        this.openerTraining = configuration.OpenerTraining;
         this.disabledActions = configuration.DisabledActionIds.ToHashSet();
         this.enabledMitigations = configuration.EnabledMitigationIds.ToHashSet();
+        if (this.openerTraining)
+        {
+            lock (this.gate)
+                this.ShowOpenerLocked();
+        }
     }
 
     public GuideSnapshot Snapshot()
@@ -164,6 +176,7 @@ internal sealed class GuideController : IDisposable
                 UseGemdraught = this.useGemdraught,
                 ShowSkills = this.showSkills,
                 SkillsDetached = this.skillsDetached,
+                OpenerTraining = this.openerTraining,
                 Actions = ActionMenu.Build(
                     this.jobSpec,
                     this.logActions,
@@ -187,6 +200,8 @@ internal sealed class GuideController : IDisposable
 
             this.encounterId = selectedEncounterId;
             this.ClearLoadedLocked();
+            if (this.openerTraining)
+                this.ShowOpenerLocked();
             reload = this.jobSpec is not null;
         }
 
@@ -210,7 +225,11 @@ internal sealed class GuideController : IDisposable
             var changed = this.jobSpec != job.SpecName;
             this.jobSpec = job.SpecName;
             if (changed)
+            {
                 this.ClearLoadedLocked();
+                if (this.openerTraining)
+                    this.ShowOpenerLocked();
+            }
         }
 
         this.configuration.LastJobSpec = job.SpecName;
@@ -255,6 +274,8 @@ internal sealed class GuideController : IDisposable
             this.includeOffGcds = include;
             if (this.lastInput is not null)
                 this.pending = this.lastInput;
+            if (this.openerTraining)
+                this.ShowOpenerLocked();
         }
 
         this.configuration.IncludeOffGcds = include;
@@ -328,6 +349,34 @@ internal sealed class GuideController : IDisposable
         this.configuration.Save();
     }
 
+    public void SetOpenerTraining(bool enabled)
+    {
+        lock (this.gate)
+        {
+            if (this.openerTraining == enabled)
+                return;
+
+            this.openerTraining = enabled;
+            this.mismatch = false;
+            this.stepQueued = false;
+            this.queuedActionId = 0;
+            if (enabled)
+            {
+                this.ClearPull();
+                this.ShowOpenerLocked();
+            }
+            else
+            {
+                this.ShowParseLocked();
+                if (this.pullActive)
+                    this.AlignToActivePull();
+            }
+        }
+
+        this.configuration.OpenerTraining = enabled;
+        this.configuration.Save();
+    }
+
     public void SetUseGemdraught(bool enabled)
     {
         lock (this.gate)
@@ -335,6 +384,8 @@ internal sealed class GuideController : IDisposable
             this.useGemdraught = enabled;
             if (this.lastInput is not null)
                 this.pending = this.lastInput;
+            if (this.openerTraining)
+                this.ShowOpenerLocked();
         }
 
         this.configuration.UseGemdraught = enabled;
@@ -559,17 +610,25 @@ internal sealed class GuideController : IDisposable
             var title = string.IsNullOrWhiteSpace(job)
                 ? $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {input.PlayerName}"
                 : $"{UltimateCatalog.GetOrFirst(this.encounterId).Alias} · {job} · {input.PlayerName}";
-            this.playback = new GuidePlayback(steps);
+            var built = new GuidePlayback(steps);
+            var builtStatus = steps.Count == 0
+                ? "The log had no abilities after filtering."
+                : $"{steps.Count} steps. In the selected ultimate, the guide follows the pull.";
+            this.parsePlayback = built;
+            this.parseTitle = title;
+            this.parseStatus = builtStatus;
+            this.busy = false;
+            this.error = string.Empty;
+            this.status = builtStatus;
+            if (this.openerTraining)
+                return steps.Count > 0 && announce;
+
+            this.playback = built;
             this.pace.Reset();
             this.stepQueued = false;
             this.queuedActionId = 0;
             this.mismatch = false;
             this.guideTitle = title;
-            this.busy = false;
-            this.error = string.Empty;
-            this.status = steps.Count == 0
-                ? "The log had no abilities after filtering."
-                : $"{steps.Count} steps. In the selected ultimate, the guide follows the pull.";
             this.AlignToActivePull();
             if (this.autoRotation && this.pullActive)
                 this.dutyStatus = "Following the pull. Automatic rotation is on.";
@@ -588,6 +647,9 @@ internal sealed class GuideController : IDisposable
     {
         lock (this.gate)
         {
+            if (this.openerTraining)
+                return this.SyncOpenerPractice(territoryType, inCombat, strikingDummy, utcNow);
+
             var selected = UltimateCatalog.GetOrFirst(this.encounterId);
             var inSelectedZone = territoryType != 0 && territoryType == selected.TerritoryId;
 
@@ -666,6 +728,96 @@ internal sealed class GuideController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Practices the opener in the selected ultimate or on a striking dummy.
+    /// The clock can start, but the index is not snapped to the fight time and a wipe does not reset it.
+    /// </summary>
+    private DutySync SyncOpenerPractice(uint territoryType, bool inCombat, bool strikingDummy, DateTime utcNow)
+    {
+        var selected = UltimateCatalog.GetOrFirst(this.encounterId);
+        var inSelectedZone = territoryType != 0 && territoryType == selected.TerritoryId;
+        var canPractice = inSelectedZone || strikingDummy;
+        if (!canPractice)
+        {
+            var wasActive = this.pullActive || this.inDutyZone || this.dummyPractice;
+            this.inDutyZone = false;
+            this.dummyPractice = false;
+            if (this.pullActive)
+                this.ClearPull();
+
+            this.mismatch = false;
+            if (wasActive)
+                this.dutyStatus = "Opener practice paused. The queue stays where you left it.";
+
+            return DutySync.None;
+        }
+
+        if (inSelectedZone)
+        {
+            if (this.dummyPractice)
+            {
+                this.dummyPractice = false;
+                if (this.pullActive)
+                    this.ClearPull();
+            }
+
+            if (!this.inDutyZone)
+            {
+                this.inDutyZone = true;
+                this.dutyStatus = inCombat
+                    ? $"In {selected.EnglishName}. Practicing the opener."
+                    : $"In {selected.EnglishName}. Waiting to practice the opener.";
+            }
+        }
+        else if (!this.dummyPractice)
+        {
+            this.dummyPractice = true;
+            this.inDutyZone = false;
+            this.dutyStatus = "Striking dummy. Practicing the opener.";
+        }
+
+        if (this.pullActive && !this.combatSeen && this.pullStartedUtc is { } started
+            && (utcNow - started).TotalSeconds > 8)
+        {
+            this.ClearPull();
+            this.mismatch = false;
+            this.dutyStatus = "The countdown ended without a pull. The opener stays where you left it.";
+            return DutySync.None;
+        }
+
+        if (inCombat && !this.pullActive)
+        {
+            this.pullActive = true;
+            this.combatSeen = true;
+            this.countdownPull = false;
+            this.pullStartedUtc = utcNow;
+            this.mismatch = false;
+            this.dutyStatus = this.autoRotation
+                ? "Practicing the opener. Automatic rotation is on."
+                : "Practicing the opener. After the first skill, a later press marks skipped steps with an X.";
+            if (this.playback is null)
+                return DutySync.None;
+
+            if (!inSelectedZone && !this.autoRotation)
+                return DutySync.None;
+
+            return inSelectedZone ? DutySync.PullStarted : DutySync.DummyStarted;
+        }
+
+        if (inCombat && this.pullActive)
+            this.combatSeen = true;
+
+        if (!inCombat && this.pullActive && this.combatSeen)
+        {
+            this.ClearPull();
+            this.mismatch = false;
+            this.dutyStatus = "Opener practice paused. The queue stays where you left it.";
+            return DutySync.None;
+        }
+
+        return DutySync.None;
+    }
+
     private DutySync SyncDummy(DateTime utcNow, bool inCombat)
     {
         if (!this.dummyPractice)
@@ -739,6 +891,12 @@ internal sealed class GuideController : IDisposable
             this.countdownPull = true;
             this.pullStartedUtc = utcNow;
             this.mismatch = false;
+            if (this.openerTraining)
+            {
+                this.dutyStatus = "Countdown is at the end of the 1. The opener starts now.";
+                return DutySync.CountdownStarted;
+            }
+
             this.AlignToActivePull(utcNow);
             this.dutyStatus = "Countdown is at the end of the 1. The current step is due now.";
             return DutySync.CountdownStarted;
@@ -892,7 +1050,7 @@ internal sealed class GuideController : IDisposable
             if (this.playback is null || this.playback.IsComplete)
                 return;
 
-            if (!this.pullActive)
+            if (!this.pullActive && !this.openerTraining)
             {
                 this.mismatch = !this.playback.TryAdvance(actionId, adjustedActionId);
                 return;
@@ -1069,6 +1227,66 @@ internal sealed class GuideController : IDisposable
         this.dutyStatus = "Following the pull.";
     }
 
+    private void ShowOpenerLocked()
+    {
+        var job = JobCatalog.Find(this.jobSpec);
+        var steps = BalanceOpeners.For(this.jobSpec, this.includeOffGcds, this.useGemdraught);
+        this.stepQueued = false;
+        this.queuedActionId = 0;
+        this.mismatch = false;
+        this.pace.Reset();
+        if (job is null || steps is null || steps.Count == 0)
+        {
+            this.playback = null;
+            this.guideTitle = string.Empty;
+            this.dutyStatus = "Pick a job on the Parses page to practice its opener.";
+            return;
+        }
+
+        this.playback = new GuidePlayback(Present(steps));
+        this.guideTitle = $"The Balance opener · {job.EnglishName}";
+        this.dutyStatus = "Practicing the opener. After the first skill, a later press marks skipped steps with an X and jumps the queue.";
+        if (this.pullActive)
+            this.pullStartedUtc = DateTime.UtcNow;
+    }
+
+    private void ShowParseLocked()
+    {
+        this.playback = this.parsePlayback;
+        this.guideTitle = this.parseTitle;
+        this.pace.Reset();
+        this.stepQueued = false;
+        this.queuedActionId = 0;
+        this.mismatch = false;
+        if (!string.IsNullOrEmpty(this.parseStatus))
+            this.status = this.parseStatus;
+
+        this.dutyStatus = this.playback is null
+            ? string.Empty
+            : "Showing the loaded parse.";
+    }
+
+    private static List<GuideStep> Present(IReadOnlyList<GuideStep> steps)
+    {
+        var presented = new List<GuideStep>(steps.Count);
+        foreach (var step in steps)
+        {
+            if (step.ActionId == 0)
+            {
+                presented.Add(step);
+                continue;
+            }
+
+            presented.Add(step with
+            {
+                Name = GameActions.ClientName(step.ActionId, Plugin.DataManager) ?? step.Name,
+                AdjustedActionId = GameActions.Adjusted(step.ActionId),
+            });
+        }
+
+        return presented;
+    }
+
     public void Dispose()
     {
         this.requests.Cancel();
@@ -1145,11 +1363,18 @@ internal sealed class GuideController : IDisposable
                     return;
 
                 this.report = loaded;
-                this.playback = null;
+                this.parsePlayback = null;
+                this.parseTitle = string.Empty;
+                this.parseStatus = string.Empty;
+                if (!this.openerTraining)
+                {
+                    this.playback = null;
+                    this.guideTitle = string.Empty;
+                }
+
                 this.pace.Reset();
                 this.pending = null;
                 this.lastInput = null;
-                this.guideTitle = string.Empty;
                 this.fightId = null;
                 this.actorId = null;
 
@@ -1234,7 +1459,8 @@ internal sealed class GuideController : IDisposable
                 this.lastInput = input;
                 this.pending = input;
                 this.announceGuide = true;
-                this.playback = null;
+                if (!this.openerTraining)
+                    this.playback = null;
                 this.pace.Reset();
                 this.status = "Casts received. Building the guide…";
             }
@@ -1278,6 +1504,9 @@ internal sealed class GuideController : IDisposable
         this.rankedPlayer = null;
         this.rankedCode = null;
         this.playback = null;
+        this.parsePlayback = null;
+        this.parseTitle = string.Empty;
+        this.parseStatus = string.Empty;
         this.pace.Reset();
         this.pending = null;
         this.lastInput = null;

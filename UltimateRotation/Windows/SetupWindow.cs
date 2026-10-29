@@ -233,6 +233,11 @@ internal sealed class SetupWindow : Window
 
     private void DrawRotation(GuideSnapshot view)
     {
+        var openerTraining = view.OpenerTraining;
+        if (ImGui.Checkbox(UiText.OpenerTraining, ref openerTraining) && openerTraining != view.OpenerTraining)
+            this.controller.SetOpenerTraining(openerTraining);
+        ImGui.TextDisabled(UiText.OpenerTrainingHint);
+
         var includeOffGcds = view.IncludeOffGcds;
         if (ImGui.Checkbox("Include oGCDs", ref includeOffGcds) && includeOffGcds != view.IncludeOffGcds)
             this.controller.SetIncludeOffGcds(includeOffGcds);
@@ -282,6 +287,13 @@ internal sealed class SetupWindow : Window
         var playback = view.Playback;
         if (playback is null)
         {
+            if (view.OpenerTraining)
+            {
+                ImGui.Text("No opener loaded.");
+                ImGui.TextWrapped("Pick a job on the Parses page. Opener training shows that job's Balance opener in this timeline.");
+                return;
+            }
+
             ImGui.Text("No guide loaded.");
             ImGui.TextWrapped("Pick an ultimate, a job, and a ranked parse on the Parses page.");
             ImGui.TextDisabled(UiText.GuideOnly);
